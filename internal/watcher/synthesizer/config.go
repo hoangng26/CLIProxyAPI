@@ -200,9 +200,71 @@ func (s *ConfigSynthesizer) synthesizeXAIKeys(ctx *SynthesisContext) []*coreauth
 	return s.synthesizeCodexStyleKeys(ctx, ctx.Config.XAIKey, "xai")
 }
 
-// synthesizeCommandCodeKeys creates Auth entries for CommandCode API keys.
+// synthesizeCommandCodeKeys creates Auth entries for CommandCode multi-key provider blocks.
 func (s *ConfigSynthesizer) synthesizeCommandCodeKeys(ctx *SynthesisContext) []*coreauth.Auth {
-	return s.synthesizeCodexStyleKeys(ctx, ctx.Config.CommandCodeKey, "commandcode")
+	cfg := ctx.Config
+	now := ctx.Now
+	idGen := ctx.IDGenerator
+	out := make([]*coreauth.Auth, 0)
+	for i := range cfg.CommandCodeKey {
+		block := cfg.CommandCodeKey[i]
+		if block.Disabled {
+			continue
+		}
+		name := strings.TrimSpace(block.Name)
+		if name == "" {
+			continue
+		}
+		providerName := strings.ToLower(name)
+		base := strings.TrimSpace(block.BaseURL)
+		prefix := strings.TrimSpace(block.Prefix)
+		idKind := fmt.Sprintf("commandcode:%s", providerName)
+		for j := range block.APIKeyEntries {
+			key := strings.TrimSpace(block.APIKeyEntries[j].APIKey)
+			if key == "" {
+				continue
+			}
+			proxyURL := strings.TrimSpace(block.APIKeyEntries[j].ProxyURL)
+			id, token := idGen.Next(idKind, key, base, proxyURL)
+			attrs := map[string]string{
+				"source":       fmt.Sprintf("config:commandcode[%s]", token),
+				"api_key":      key,
+				"base_url":     base,
+				"config_name":  name,
+				"config_index": strconv.Itoa(i),
+			}
+			metadata := map[string]any{}
+			if block.DisableCooling {
+				metadata["disable_cooling"] = true
+			}
+			if block.Priority != 0 {
+				attrs["priority"] = strconv.Itoa(block.Priority)
+			}
+			addWeightToAttrs(block.APIKeyEntries[j].Weight, attrs)
+			if hash := diff.ComputeCodexModelsHash(block.Models); hash != "" {
+				attrs["models_hash"] = hash
+			}
+			addConfigHeadersToAttrs(block.Headers, attrs)
+			a := &coreauth.Auth{
+				ID:         id,
+				Provider:   "commandcode",
+				Label:      "commandcode-apikey",
+				Prefix:     prefix,
+				Status:     coreauth.StatusActive,
+				ProxyURL:   proxyURL,
+				Attributes: attrs,
+				Metadata:   metadata,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			}
+			ApplyAuthExcludedModelsMeta(a, cfg, block.ExcludedModels, "apikey")
+			if len(a.Metadata) == 0 {
+				a.Metadata = nil
+			}
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entries []config.CodexKey, provider string) []*coreauth.Auth {

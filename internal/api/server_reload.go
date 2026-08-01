@@ -209,7 +209,13 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 	claudeAPIKeyCount := len(cfg.ClaudeKey)
 	codexAPIKeyCount := len(cfg.CodexKey)
 	xaiAPIKeyCount := len(cfg.XAIKey)
-	commandCodeAPIKeyCount := len(cfg.CommandCodeKey)
+	commandCodeAPIKeyCount := 0
+	for i := range cfg.CommandCodeKey {
+		if cfg.CommandCodeKey[i].Disabled {
+			continue
+		}
+		commandCodeAPIKeyCount += len(cfg.CommandCodeKey[i].APIKeyEntries)
+	}
 	vertexAICompatCount := len(cfg.VertexCompatAPIKey)
 	openAICompatCount := 0
 	for i := range cfg.OpenAICompatibility {

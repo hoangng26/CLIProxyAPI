@@ -750,17 +750,21 @@ func main() {
 // modelCatalogUpdaterPlan decides which remote model catalogs should refresh.
 // Codex client templates still refresh under Home mode because the model list
 // comes from Home IDs while template metadata stays edge-local.
-func modelCatalogUpdaterPlan(localModel, homeEnabled bool) (startModels, startCodexClient bool) {
+// CommandCode catalog refreshes independently from api.commandcode.ai.
+func modelCatalogUpdaterPlan(localModel, homeEnabled bool) (startModels, startCodexClient, startCommandCode bool) {
 	if localModel {
-		return false, false
+		return false, false, false
 	}
-	return !homeEnabled, true
+	return !homeEnabled, true, true
 }
 
 func startModelCatalogUpdaters(localModel, homeEnabled bool) {
-	startModels, startCodexClient := modelCatalogUpdaterPlan(localModel, homeEnabled)
+	startModels, startCodexClient, startCommandCode := modelCatalogUpdaterPlan(localModel, homeEnabled)
 	if startCodexClient {
 		registry.StartCodexClientModelsUpdater(context.Background())
+	}
+	if startCommandCode {
+		registry.StartCommandCodeModelsUpdater(context.Background())
 	}
 	if startModels {
 		registry.StartModelsUpdater(context.Background())

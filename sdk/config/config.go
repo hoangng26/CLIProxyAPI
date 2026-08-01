@@ -24,8 +24,12 @@ type GeminiKey = internalconfig.GeminiKey
 type CodexKey = internalconfig.CodexKey
 type XAIKey = internalconfig.XAIKey
 type XAIModel = internalconfig.XAIModel
-type CommandCodeKey = internalconfig.CommandCodeKey
+type CommandCodeProvider = internalconfig.CommandCodeProvider
+type CommandCodeAPIKey = internalconfig.CommandCodeAPIKey
 type CommandCodeModel = internalconfig.CommandCodeModel
+
+// Deprecated: CommandCodeKey previously aliased CodexKey; use CommandCodeProvider.
+type CommandCodeKey = internalconfig.CommandCodeProvider
 type ClaudeKey = internalconfig.ClaudeKey
 type VertexCompatKey = internalconfig.VertexCompatKey
 type VertexCompatModel = internalconfig.VertexCompatModel

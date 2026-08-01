@@ -95,42 +95,48 @@ func TestModelCatalogUpdaterPlan(t *testing.T) {
 		homeEnabled     bool
 		wantModels      bool
 		wantCodexClient bool
+		wantCommandCode bool
 	}{
 		{
-			name:            "normal CPA refreshes both catalogs",
+			name:            "normal CPA refreshes all remote catalogs",
 			localModel:      false,
 			homeEnabled:     false,
 			wantModels:      true,
 			wantCodexClient: true,
+			wantCommandCode: true,
 		},
 		{
-			name:            "home mode keeps models.json local and refreshes codex templates",
+			name:            "home mode keeps models.json local and refreshes codex+commandcode",
 			localModel:      false,
 			homeEnabled:     true,
 			wantModels:      false,
 			wantCodexClient: true,
+			wantCommandCode: true,
 		},
 		{
-			name:            "local-model disables both remote catalogs",
+			name:            "local-model disables all remote catalogs",
 			localModel:      true,
 			homeEnabled:     false,
 			wantModels:      false,
 			wantCodexClient: false,
+			wantCommandCode: false,
 		},
 		{
-			name:            "local-model disables both remote catalogs even under home",
+			name:            "local-model disables all remote catalogs even under home",
 			localModel:      true,
 			homeEnabled:     true,
 			wantModels:      false,
 			wantCodexClient: false,
+			wantCommandCode: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotModels, gotCodex := modelCatalogUpdaterPlan(tt.localModel, tt.homeEnabled)
-			if gotModels != tt.wantModels || gotCodex != tt.wantCodexClient {
-				t.Fatalf("modelCatalogUpdaterPlan(%v, %v) = (%v, %v), want (%v, %v)",
-					tt.localModel, tt.homeEnabled, gotModels, gotCodex, tt.wantModels, tt.wantCodexClient)
+			gotModels, gotCodex, gotCommandCode := modelCatalogUpdaterPlan(tt.localModel, tt.homeEnabled)
+			if gotModels != tt.wantModels || gotCodex != tt.wantCodexClient || gotCommandCode != tt.wantCommandCode {
+				t.Fatalf("modelCatalogUpdaterPlan(%v, %v) = (%v, %v, %v), want (%v, %v, %v)",
+					tt.localModel, tt.homeEnabled, gotModels, gotCodex, gotCommandCode,
+					tt.wantModels, tt.wantCodexClient, tt.wantCommandCode)
 			}
 		})
 	}

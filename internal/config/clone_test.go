@@ -139,8 +139,11 @@ func sampleCloneRuntimeConfig() *Config {
 			Headers:        map[string]string{"X-Codex": "one"},
 			ExcludedModels: []string{"codex-hidden-key"},
 		}},
-		CommandCodeKey: []CommandCodeKey{{
-			APIKey:         "commandcode-key",
+		CommandCodeKey: []CommandCodeProvider{{
+			Name: "primary",
+			APIKeyEntries: []CommandCodeAPIKey{
+				{APIKey: "commandcode-key"},
+			},
 			Models:         []CommandCodeModel{{Name: "deepseek/deepseek-v4-flash", Alias: "ds-flash"}},
 			Headers:        map[string]string{"X-CommandCode": "one"},
 			ExcludedModels: []string{"commandcode-hidden"},

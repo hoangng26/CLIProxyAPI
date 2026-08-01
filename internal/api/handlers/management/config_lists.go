@@ -1552,7 +1552,7 @@ func (h *Handler) DeleteXAIKey(c *gin.Context) {
 	c.JSON(400, gin.H{"error": "missing api-key or index"})
 }
 
-// commandcode-api-key: []CommandCodeKey
+// commandcode-api-key: []CommandCodeProvider (named multi-key blocks)
 func (h *Handler) GetCommandCodeKeys(c *gin.Context) {
 	c.JSON(200, gin.H{"commandcode-api-key": h.commandCodeKeysWithAuthIndex()})
 }
@@ -1563,27 +1563,42 @@ func (h *Handler) PutCommandCodeKeys(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "failed to read body"})
 		return
 	}
-	var arr []config.CommandCodeKey
-	if errUnmarshal := json.Unmarshal(data, &arr); errUnmarshal != nil {
+	var probes []json.RawMessage
+	if errUnmarshal := json.Unmarshal(data, &probes); errUnmarshal != nil {
 		var obj struct {
-			Items []config.CommandCodeKey `json:"items"`
+			Items []json.RawMessage `json:"items"`
 		}
 		if errObject := json.Unmarshal(data, &obj); errObject != nil || len(obj.Items) == 0 {
 			c.JSON(400, gin.H{"error": "invalid body"})
 			return
 		}
-		arr = obj.Items
+		probes = obj.Items
 	}
-	// Filter only empty api-key; BaseURL is defaulted by SanitizeCommandCodeKeys.
-	filtered := make([]config.CommandCodeKey, 0, len(arr))
-	for i := range arr {
-		entry := arr[i]
-		normalizeCodexKey(&entry)
-		if entry.APIKey == "" {
+	filtered := make([]config.CommandCodeProvider, 0, len(probes))
+	for i := range probes {
+		var legacyProbe struct {
+			APIKey        string          `json:"api-key"`
+			APIKeyEntries json.RawMessage `json:"api-key-entries"`
+		}
+		_ = json.Unmarshal(probes[i], &legacyProbe)
+		if strings.TrimSpace(legacyProbe.APIKey) != "" && len(legacyProbe.APIKeyEntries) == 0 {
+			c.JSON(400, gin.H{"error": "commandcode-api-key: legacy single-key shape is no longer supported; use name + api-key-entries"})
+			return
+		}
+		var entry config.CommandCodeProvider
+		if errEntry := json.Unmarshal(probes[i], &entry); errEntry != nil {
+			c.JSON(400, gin.H{"error": "invalid body"})
+			return
+		}
+		normalizeCommandCodeProvider(&entry)
+		if strings.TrimSpace(entry.Name) == "" {
 			continue
 		}
-		if rejectInvalidCredentialWeight(c, fmt.Sprintf("commandcode-api-key[%d].weight", i), entry.Weight) {
-			return
+		for keyIndex := range entry.APIKeyEntries {
+			field := fmt.Sprintf("commandcode-api-key[%d].api-key-entries[%d].weight", i, keyIndex)
+			if rejectInvalidCredentialWeight(c, field, entry.APIKeyEntries[keyIndex].Weight) {
+				return
+			}
 		}
 		filtered = append(filtered, entry)
 	}
@@ -1591,26 +1606,30 @@ func (h *Handler) PutCommandCodeKeys(c *gin.Context) {
 	defer h.mu.Unlock()
 	h.cfg.CommandCodeKey = filtered
 	h.cfg.SanitizeCommandCodeKeys()
+	if errValidate := h.cfg.ValidateCommandCodeProviders(); errValidate != nil {
+		c.JSON(400, gin.H{"error": errValidate.Error()})
+		return
+	}
 	h.persistLocked(c)
 }
 
 func (h *Handler) PatchCommandCodeKey(c *gin.Context) {
-	type commandCodeKeyPatch struct {
-		APIKey         *string                    `json:"api-key"`
-		Priority       *int                       `json:"priority"`
-		Weight         json.RawMessage            `json:"weight"`
-		Prefix         *string                    `json:"prefix"`
-		BaseURL        *string                    `json:"base-url"`
-		ProxyURL       *string                    `json:"proxy-url"`
-		Models         *[]config.CommandCodeModel `json:"models"`
-		Headers        *map[string]string         `json:"headers"`
-		ExcludedModels *[]string                  `json:"excluded-models"`
-		DisableCooling *bool                      `json:"disable-cooling"`
+	type commandCodeProviderPatch struct {
+		Name           *string                     `json:"name"`
+		Priority       *int                        `json:"priority"`
+		Disabled       *bool                       `json:"disabled"`
+		Prefix         *string                     `json:"prefix"`
+		BaseURL        *string                     `json:"base-url"`
+		APIKeyEntries  *[]config.CommandCodeAPIKey `json:"api-key-entries"`
+		Models         *[]config.CommandCodeModel  `json:"models"`
+		Headers        *map[string]string          `json:"headers"`
+		ExcludedModels *[]string                   `json:"excluded-models"`
+		DisableCooling *bool                       `json:"disable-cooling"`
 	}
 	var body struct {
-		Index *int                 `json:"index"`
-		Match *string              `json:"match"`
-		Value *commandCodeKeyPatch `json:"value"`
+		Index *int                      `json:"index"`
+		Name  *string                   `json:"name"`
+		Value *commandCodeProviderPatch `json:"value"`
 	}
 	if errBind := c.ShouldBindJSON(&body); errBind != nil || body.Value == nil {
 		c.JSON(400, gin.H{"error": "invalid body"})
@@ -1623,10 +1642,10 @@ func (h *Handler) PatchCommandCodeKey(c *gin.Context) {
 	if body.Index != nil && *body.Index >= 0 && *body.Index < len(h.cfg.CommandCodeKey) {
 		targetIndex = *body.Index
 	}
-	if targetIndex == -1 && body.Match != nil {
-		match := strings.TrimSpace(*body.Match)
+	if targetIndex == -1 && body.Name != nil {
+		match := strings.TrimSpace(*body.Name)
 		for i := range h.cfg.CommandCodeKey {
-			if h.cfg.CommandCodeKey[i].APIKey == match {
+			if strings.EqualFold(strings.TrimSpace(h.cfg.CommandCodeKey[i].Name), match) {
 				targetIndex = i
 				break
 			}
@@ -1638,29 +1657,29 @@ func (h *Handler) PatchCommandCodeKey(c *gin.Context) {
 	}
 
 	entry := h.cfg.CommandCodeKey[targetIndex]
-	if body.Value.APIKey != nil {
-		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
+	if body.Value.Name != nil {
+		entry.Name = strings.TrimSpace(*body.Value.Name)
 	}
 	if body.Value.Priority != nil {
 		entry.Priority = *body.Value.Priority
 	}
-	if len(body.Value.Weight) > 0 {
-		weight, errWeight := parseCredentialWeightPatch(body.Value.Weight)
-		if errWeight != nil {
-			c.JSON(400, gin.H{"error": errWeight.Error()})
-			return
-		}
-		entry.Weight = weight
+	if body.Value.Disabled != nil {
+		entry.Disabled = *body.Value.Disabled
 	}
 	if body.Value.Prefix != nil {
 		entry.Prefix = strings.TrimSpace(*body.Value.Prefix)
 	}
 	if body.Value.BaseURL != nil {
-		// Empty BaseURL is allowed; SanitizeCommandCodeKeys defaults it.
 		entry.BaseURL = strings.TrimSpace(*body.Value.BaseURL)
 	}
-	if body.Value.ProxyURL != nil {
-		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	if body.Value.APIKeyEntries != nil {
+		for keyIndex := range *body.Value.APIKeyEntries {
+			field := fmt.Sprintf("commandcode-api-key[%d].api-key-entries[%d].weight", targetIndex, keyIndex)
+			if rejectInvalidCredentialWeight(c, field, (*body.Value.APIKeyEntries)[keyIndex].Weight) {
+				return
+			}
+		}
+		entry.APIKeyEntries = append([]config.CommandCodeAPIKey(nil), (*body.Value.APIKeyEntries)...)
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.CommandCodeModel(nil), (*body.Value.Models)...)
@@ -1674,9 +1693,13 @@ func (h *Handler) PatchCommandCodeKey(c *gin.Context) {
 	if body.Value.DisableCooling != nil {
 		entry.DisableCooling = *body.Value.DisableCooling
 	}
-	normalizeCodexKey(&entry)
+	normalizeCommandCodeProvider(&entry)
 	h.cfg.CommandCodeKey[targetIndex] = entry
 	h.cfg.SanitizeCommandCodeKeys()
+	if errValidate := h.cfg.ValidateCommandCodeProviders(); errValidate != nil {
+		c.JSON(400, gin.H{"error": errValidate.Error()})
+		return
+	}
 	h.persistLocked(c)
 }
 
@@ -1684,38 +1707,18 @@ func (h *Handler) DeleteCommandCodeKey(c *gin.Context) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if val := strings.TrimSpace(c.Query("api-key")); val != "" {
-		if baseRaw, okBase := c.GetQuery("base-url"); okBase {
-			base := strings.TrimSpace(baseRaw)
-			out := make([]config.CommandCodeKey, 0, len(h.cfg.CommandCodeKey))
-			for _, entry := range h.cfg.CommandCodeKey {
-				if strings.TrimSpace(entry.APIKey) == val && strings.TrimSpace(entry.BaseURL) == base {
-					continue
-				}
-				out = append(out, entry)
+		c.JSON(400, gin.H{"error": "delete by api-key is no longer supported; use name or index"})
+		return
+	}
+	if name := strings.TrimSpace(c.Query("name")); name != "" {
+		out := make([]config.CommandCodeProvider, 0, len(h.cfg.CommandCodeKey))
+		for _, entry := range h.cfg.CommandCodeKey {
+			if strings.EqualFold(strings.TrimSpace(entry.Name), name) {
+				continue
 			}
-			h.cfg.CommandCodeKey = out
-			h.cfg.SanitizeCommandCodeKeys()
-			h.persistLocked(c)
-			return
+			out = append(out, entry)
 		}
-
-		matchIndex := -1
-		matchCount := 0
-		for i := range h.cfg.CommandCodeKey {
-			if strings.TrimSpace(h.cfg.CommandCodeKey[i].APIKey) == val {
-				matchCount++
-				if matchIndex == -1 {
-					matchIndex = i
-				}
-			}
-		}
-		if matchCount > 1 {
-			c.JSON(400, gin.H{"error": "multiple items match api-key; base-url is required"})
-			return
-		}
-		if matchIndex != -1 {
-			h.cfg.CommandCodeKey = append(h.cfg.CommandCodeKey[:matchIndex], h.cfg.CommandCodeKey[matchIndex+1:]...)
-		}
+		h.cfg.CommandCodeKey = out
 		h.cfg.SanitizeCommandCodeKeys()
 		h.persistLocked(c)
 		return
@@ -1730,7 +1733,32 @@ func (h *Handler) DeleteCommandCodeKey(c *gin.Context) {
 			return
 		}
 	}
-	c.JSON(400, gin.H{"error": "missing api-key or index"})
+	c.JSON(400, gin.H{"error": "missing name or index"})
+}
+
+func normalizeCommandCodeProvider(entry *config.CommandCodeProvider) {
+	if entry == nil {
+		return
+	}
+	entry.Name = strings.TrimSpace(entry.Name)
+	entry.Prefix = strings.TrimSpace(entry.Prefix)
+	entry.BaseURL = strings.TrimSpace(entry.BaseURL)
+	entry.Headers = config.NormalizeHeaders(entry.Headers)
+	entry.ExcludedModels = config.NormalizeExcludedModels(entry.ExcludedModels)
+	if len(entry.APIKeyEntries) == 0 {
+		return
+	}
+	keys := make([]config.CommandCodeAPIKey, 0, len(entry.APIKeyEntries))
+	for i := range entry.APIKeyEntries {
+		k := entry.APIKeyEntries[i]
+		k.APIKey = strings.TrimSpace(k.APIKey)
+		k.ProxyURL = strings.TrimSpace(k.ProxyURL)
+		if k.APIKey == "" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	entry.APIKeyEntries = keys
 }
 
 func normalizeOpenAICompatibilityEntry(entry *config.OpenAICompatibility) {

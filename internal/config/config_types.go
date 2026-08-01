@@ -478,8 +478,54 @@ type XAIKey = CodexKey
 // XAIModel uses the Codex model mapping structure for xAI models.
 type XAIModel = CodexModel
 
-// CommandCodeKey uses the Codex API key structure for native CommandCode execution.
-type CommandCodeKey = CodexKey
+// CommandCodeProvider is one named CommandCode upstream with shared settings
+// and one or more API key credentials (OpenAI-compat-style multi-key block).
+type CommandCodeProvider struct {
+	// Name is the identifier for this CommandCode provider block.
+	Name string `yaml:"name" json:"name"`
+
+	// Priority controls selection preference when multiple providers or credentials match.
+	// Higher values are preferred; defaults to 0.
+	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// Disabled prevents this provider from being used for routing.
+	Disabled bool `yaml:"disabled,omitempty" json:"disabled,omitempty"`
+
+	// Prefix optionally namespaces model aliases for this provider.
+	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+
+	// BaseURL is the base URL for the CommandCode API endpoint.
+	// If empty, the default CommandCode API URL will be used.
+	BaseURL string `yaml:"base-url" json:"base-url"`
+
+	// APIKeyEntries defines API keys with optional per-key proxy and weight configuration.
+	APIKeyEntries []CommandCodeAPIKey `yaml:"api-key-entries,omitempty" json:"api-key-entries,omitempty"`
+
+	// Models defines upstream model names and aliases for request routing.
+	Models []CommandCodeModel `yaml:"models" json:"models"`
+
+	// Headers optionally adds extra HTTP headers for requests sent to this provider.
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+
+	// ExcludedModels lists model IDs that should be excluded for this provider.
+	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
+
+	// DisableCooling disables auth/model cooldown scheduling for this provider when true.
+	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+}
+
+// CommandCodeAPIKey is one credential under a CommandCodeProvider block.
+type CommandCodeAPIKey struct {
+	// APIKey is the authentication key for accessing CommandCode API services.
+	APIKey string `yaml:"api-key" json:"api-key"`
+
+	// Weight controls proportional selection under weighted-round-robin.
+	// An omitted value defaults to 1; non-positive values exclude this credential; maximum 1,000,000.
+	Weight *int `yaml:"weight,omitempty" json:"weight,omitempty"`
+
+	// ProxyURL overrides the global proxy setting for this API key if provided.
+	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
+}
 
 // CommandCodeModel uses the Codex model mapping structure for CommandCode models.
 type CommandCodeModel = CodexModel

@@ -51,6 +51,11 @@ func TestWithXAIBuiltinsIncludesVideoPreviewModel(t *testing.T) {
 }
 
 func TestGetCommandCodeModelsIncludesDeepSeek(t *testing.T) {
+	t.Cleanup(func() {
+		_ = loadCommandCodeModels(commandCodeBuiltinModels(), "test-cleanup")
+	})
+	_ = loadCommandCodeModels(commandCodeBuiltinModels(), "test-reset")
+
 	models := GetCommandCodeModels()
 	found := false
 	for _, m := range models {
@@ -65,6 +70,11 @@ func TestGetCommandCodeModelsIncludesDeepSeek(t *testing.T) {
 }
 
 func TestGetCommandCodeModelsCatalog(t *testing.T) {
+	t.Cleanup(func() {
+		_ = loadCommandCodeModels(commandCodeBuiltinModels(), "test-cleanup")
+	})
+	_ = loadCommandCodeModels(commandCodeBuiltinModels(), "test-reset")
+
 	wantIDs := []string{
 		"deepseek/deepseek-v4-pro",
 		"deepseek/deepseek-v4-flash",
@@ -79,8 +89,8 @@ func TestGetCommandCodeModelsCatalog(t *testing.T) {
 		"stepfun/Step-3.5-Flash",
 	}
 	models := GetCommandCodeModels()
-	if len(models) != len(wantIDs) {
-		t.Fatalf("model count = %d, want %d", len(models), len(wantIDs))
+	if len(models) < len(wantIDs) {
+		t.Fatalf("model count = %d, want at least %d", len(models), len(wantIDs))
 	}
 	got := make(map[string]*ModelInfo, len(models))
 	for _, m := range models {

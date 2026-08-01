@@ -112,8 +112,8 @@ type Config struct {
 	// XAIKey defines xAI API key configurations using the same structure as Codex API keys.
 	XAIKey []XAIKey `yaml:"xai-api-key" json:"xai-api-key"`
 
-	// CommandCodeKey defines CommandCode API key configurations using the same structure as Codex API keys.
-	CommandCodeKey []CommandCodeKey `yaml:"commandcode-api-key" json:"commandcode-api-key"`
+	// CommandCodeKey defines named CommandCode provider blocks with nested api-key-entries.
+	CommandCodeKey []CommandCodeProvider `yaml:"commandcode-api-key" json:"commandcode-api-key"`
 
 	// XAI configures provider-wide xAI request behavior.
 	XAI XAIConfig `yaml:"xai" json:"xai"`

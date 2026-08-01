@@ -785,11 +785,86 @@ func resolveXAIAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalcon
 	return resolveAPIKeyConfig(cfg.XAIKey, auth)
 }
 
-func resolveCommandCodeAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.CommandCodeKey {
-	if cfg == nil {
+func resolveCommandCodeAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.CommandCodeProvider {
+	if cfg == nil || auth == nil || len(cfg.CommandCodeKey) == 0 {
 		return nil
 	}
-	return resolveAPIKeyConfig(cfg.CommandCodeKey, auth)
+	attrKey, attrBase, configName := "", "", ""
+	if auth.Attributes != nil {
+		attrKey = strings.TrimSpace(auth.Attributes[AttributeAPIKey])
+		attrBase = strings.TrimSpace(auth.Attributes["base_url"])
+		configName = strings.TrimSpace(auth.Attributes["config_name"])
+	}
+	blockHasKey := func(block internalconfig.CommandCodeProvider, apiKey string) bool {
+		if apiKey == "" {
+			return true
+		}
+		for j := range block.APIKeyEntries {
+			if strings.EqualFold(strings.TrimSpace(block.APIKeyEntries[j].APIKey), apiKey) {
+				return true
+			}
+		}
+		return false
+	}
+	if configName != "" {
+		for i := range cfg.CommandCodeKey {
+			block := &cfg.CommandCodeKey[i]
+			if !strings.EqualFold(strings.TrimSpace(block.Name), configName) {
+				continue
+			}
+			if attrBase != "" && strings.TrimSpace(block.BaseURL) != "" && !strings.EqualFold(strings.TrimSpace(block.BaseURL), attrBase) {
+				continue
+			}
+			if !blockHasKey(*block, attrKey) {
+				continue
+			}
+			return block
+		}
+	}
+	if auth.AuthSourceKind() == AuthSourceConfig && auth.Attributes != nil {
+		if index, errIndex := strconv.Atoi(strings.TrimSpace(auth.Attributes[AttributeConfigIndex])); errIndex == nil && index >= 0 && index < len(cfg.CommandCodeKey) {
+			block := &cfg.CommandCodeKey[index]
+			if blockHasKey(*block, attrKey) {
+				if attrBase == "" || strings.TrimSpace(block.BaseURL) == "" || strings.EqualFold(strings.TrimSpace(block.BaseURL), attrBase) {
+					return block
+				}
+			}
+		}
+	}
+	for i := range cfg.CommandCodeKey {
+		block := &cfg.CommandCodeKey[i]
+		if attrBase != "" && strings.TrimSpace(block.BaseURL) != "" && !strings.EqualFold(strings.TrimSpace(block.BaseURL), attrBase) {
+			continue
+		}
+		if blockHasKey(*block, attrKey) && attrKey != "" {
+			return block
+		}
+	}
+	return nil
+}
+
+func resolveCommandCodeAPIKeyEntryProxyURL(cfg *internalconfig.Config, auth *Auth) string {
+	block := resolveCommandCodeAPIKeyConfig(cfg, auth)
+	if block == nil || auth == nil {
+		return ""
+	}
+	attrKey := ""
+	if auth.Attributes != nil {
+		attrKey = strings.TrimSpace(auth.Attributes[AttributeAPIKey])
+	}
+	for j := range block.APIKeyEntries {
+		entry := block.APIKeyEntries[j]
+		if attrKey != "" && !strings.EqualFold(strings.TrimSpace(entry.APIKey), attrKey) {
+			continue
+		}
+		if proxy := strings.TrimSpace(entry.ProxyURL); proxy != "" {
+			return proxy
+		}
+		if attrKey != "" {
+			return ""
+		}
+	}
+	return ""
 }
 
 func resolveVertexAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.VertexCompatKey {

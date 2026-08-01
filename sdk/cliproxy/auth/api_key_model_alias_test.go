@@ -126,11 +126,17 @@ func TestAPIKeyModelAlias_ConfigHotReload(t *testing.T) {
 
 func TestAPIKeyModelAlias_MultipleProviders(t *testing.T) {
 	cfg := &internalconfig.Config{
-		GeminiKey:      []internalconfig.GeminiKey{{APIKey: "gemini-key", Models: []internalconfig.GeminiModel{{Name: "gemini-2.5-pro", Alias: "gp"}}}},
-		ClaudeKey:      []internalconfig.ClaudeKey{{APIKey: "claude-key", Models: []internalconfig.ClaudeModel{{Name: "claude-sonnet-4", Alias: "cs4"}}}},
-		CodexKey:       []internalconfig.CodexKey{{APIKey: "codex-key", Models: []internalconfig.CodexModel{{Name: "o3", Alias: "o"}}}},
-		XAIKey:         []internalconfig.XAIKey{{APIKey: "xai-key", Models: []internalconfig.XAIModel{{Name: "grok-4.5", Alias: "grok-latest"}}}},
-		CommandCodeKey: []internalconfig.CommandCodeKey{{APIKey: "cc-key", Models: []internalconfig.CommandCodeModel{{Name: "deepseek/deepseek-v4-flash", Alias: "ds-flash"}}}},
+		GeminiKey: []internalconfig.GeminiKey{{APIKey: "gemini-key", Models: []internalconfig.GeminiModel{{Name: "gemini-2.5-pro", Alias: "gp"}}}},
+		ClaudeKey: []internalconfig.ClaudeKey{{APIKey: "claude-key", Models: []internalconfig.ClaudeModel{{Name: "claude-sonnet-4", Alias: "cs4"}}}},
+		CodexKey:  []internalconfig.CodexKey{{APIKey: "codex-key", Models: []internalconfig.CodexModel{{Name: "o3", Alias: "o"}}}},
+		XAIKey:    []internalconfig.XAIKey{{APIKey: "xai-key", Models: []internalconfig.XAIModel{{Name: "grok-4.5", Alias: "grok-latest"}}}},
+		CommandCodeKey: []internalconfig.CommandCodeProvider{{
+			Name: "primary",
+			APIKeyEntries: []internalconfig.CommandCodeAPIKey{
+				{APIKey: "cc-key"},
+			},
+			Models: []internalconfig.CommandCodeModel{{Name: "deepseek/deepseek-v4-flash", Alias: "ds-flash"}},
+		}},
 	}
 
 	mgr := NewManager(nil, nil, nil)

@@ -505,11 +505,57 @@ func (s *Service) resolveConfigXAIKey(auth *coreauth.Auth) *config.XAIKey {
 	return resolveConfigCodexStyleKey(auth, s.cfg.XAIKey, false)
 }
 
-func (s *Service) resolveConfigCommandCodeKey(auth *coreauth.Auth) *config.CommandCodeKey {
-	if s == nil || s.cfg == nil {
+func (s *Service) resolveConfigCommandCodeKey(auth *coreauth.Auth) *config.CommandCodeProvider {
+	if s == nil || s.cfg == nil || auth == nil {
 		return nil
 	}
-	return resolveConfigCodexStyleKey(auth, s.cfg.CommandCodeKey, false)
+	attrKey, attrBase, configName := "", "", ""
+	if auth.Attributes != nil {
+		attrKey = strings.TrimSpace(auth.Attributes["api_key"])
+		attrBase = strings.TrimSpace(auth.Attributes["base_url"])
+		configName = strings.TrimSpace(auth.Attributes["config_name"])
+	}
+	blockHasKey := func(block config.CommandCodeProvider, apiKey string) bool {
+		if apiKey == "" {
+			return true
+		}
+		for j := range block.APIKeyEntries {
+			if strings.EqualFold(strings.TrimSpace(block.APIKeyEntries[j].APIKey), apiKey) {
+				return true
+			}
+		}
+		return false
+	}
+	if configName != "" {
+		for i := range s.cfg.CommandCodeKey {
+			block := &s.cfg.CommandCodeKey[i]
+			if !strings.EqualFold(strings.TrimSpace(block.Name), configName) {
+				continue
+			}
+			if attrBase != "" && strings.TrimSpace(block.BaseURL) != "" && !strings.EqualFold(strings.TrimSpace(block.BaseURL), attrBase) {
+				continue
+			}
+			if !blockHasKey(*block, attrKey) {
+				continue
+			}
+			return block
+		}
+	}
+	if entry := configEntryForAuthIndex(auth, s.cfg.CommandCodeKey); entry != nil && blockHasKey(*entry, attrKey) {
+		if attrBase == "" || strings.TrimSpace(entry.BaseURL) == "" || strings.EqualFold(strings.TrimSpace(entry.BaseURL), attrBase) {
+			return entry
+		}
+	}
+	for i := range s.cfg.CommandCodeKey {
+		block := &s.cfg.CommandCodeKey[i]
+		if attrBase != "" && strings.TrimSpace(block.BaseURL) != "" && !strings.EqualFold(strings.TrimSpace(block.BaseURL), attrBase) {
+			continue
+		}
+		if blockHasKey(*block, attrKey) && attrKey != "" {
+			return block
+		}
+	}
+	return nil
 }
 
 func resolveConfigCodexStyleKey(auth *coreauth.Auth, entries []config.CodexKey, validateIndexCredentials bool) *config.CodexKey {
@@ -818,7 +864,7 @@ func buildXAIConfigModels(entry *config.XAIKey) []*ModelInfo {
 	return buildConfigModels(entry.Models, "xai", "xai")
 }
 
-func buildCommandCodeConfigModels(entry *config.CommandCodeKey) []*ModelInfo {
+func buildCommandCodeConfigModels(entry *config.CommandCodeProvider) []*ModelInfo {
 	if entry == nil {
 		return nil
 	}

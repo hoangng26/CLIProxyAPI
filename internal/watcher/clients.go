@@ -403,8 +403,11 @@ func BuildAPIKeyClients(cfg *config.Config) (gemini, vertex, claude, codex, xai,
 	if len(cfg.XAIKey) > 0 {
 		xai += len(cfg.XAIKey)
 	}
-	if len(cfg.CommandCodeKey) > 0 {
-		commandcode += len(cfg.CommandCodeKey)
+	for i := range cfg.CommandCodeKey {
+		if cfg.CommandCodeKey[i].Disabled {
+			continue
+		}
+		commandcode += len(cfg.CommandCodeKey[i].APIKeyEntries)
 	}
 	if len(cfg.OpenAICompatibility) > 0 {
 		for _, compatConfig := range cfg.OpenAICompatibility {

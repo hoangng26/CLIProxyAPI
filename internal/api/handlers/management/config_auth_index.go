@@ -28,9 +28,23 @@ type xaiKeyWithAuthIndex struct {
 	AuthIndex string `json:"auth-index,omitempty"`
 }
 
-type commandCodeKeyWithAuthIndex struct {
-	config.CommandCodeKey
+type commandCodeAPIKeyWithAuthIndex struct {
+	config.CommandCodeAPIKey
 	AuthIndex string `json:"auth-index,omitempty"`
+}
+
+type commandCodeProviderWithAuthIndex struct {
+	Name           string                           `json:"name"`
+	Priority       int                              `json:"priority,omitempty"`
+	Disabled       bool                             `json:"disabled"`
+	Prefix         string                           `json:"prefix,omitempty"`
+	BaseURL        string                           `json:"base-url"`
+	APIKeyEntries  []commandCodeAPIKeyWithAuthIndex `json:"api-key-entries,omitempty"`
+	Models         []config.CommandCodeModel        `json:"models,omitempty"`
+	Headers        map[string]string                `json:"headers,omitempty"`
+	ExcludedModels []string                         `json:"excluded-models,omitempty"`
+	DisableCooling bool                             `json:"disable-cooling,omitempty"`
+	AuthIndex      string                           `json:"auth-index,omitempty"`
 }
 
 type vertexCompatKeyWithAuthIndex struct {
@@ -234,7 +248,7 @@ func (h *Handler) xaiKeysWithAuthIndex() []xaiKeyWithAuthIndex {
 	return out
 }
 
-func (h *Handler) commandCodeKeysWithAuthIndex() []commandCodeKeyWithAuthIndex {
+func (h *Handler) commandCodeKeysWithAuthIndex() []commandCodeProviderWithAuthIndex {
 	if h == nil {
 		return nil
 	}
@@ -247,18 +261,40 @@ func (h *Handler) commandCodeKeysWithAuthIndex() []commandCodeKeyWithAuthIndex {
 	}
 
 	idGen := synthesizer.NewStableIDGenerator()
-	out := make([]commandCodeKeyWithAuthIndex, len(h.cfg.CommandCodeKey))
+	out := make([]commandCodeProviderWithAuthIndex, len(h.cfg.CommandCodeKey))
 	for i := range h.cfg.CommandCodeKey {
 		entry := h.cfg.CommandCodeKey[i]
-		authIndex := ""
-		if key := strings.TrimSpace(entry.APIKey); key != "" {
-			id, _ := idGen.Next("commandcode:apikey", key, entry.BaseURL)
-			authIndex = liveIndexByID[id]
+		providerName := strings.ToLower(strings.TrimSpace(entry.Name))
+		if providerName == "" {
+			providerName = "commandcode"
 		}
-		out[i] = commandCodeKeyWithAuthIndex{
-			CommandCodeKey: entry,
-			AuthIndex:      authIndex,
+		idKind := fmt.Sprintf("commandcode:%s", providerName)
+		response := commandCodeProviderWithAuthIndex{
+			Name:           entry.Name,
+			Priority:       entry.Priority,
+			Disabled:       entry.Disabled,
+			Prefix:         entry.Prefix,
+			BaseURL:        entry.BaseURL,
+			Models:         entry.Models,
+			Headers:        entry.Headers,
+			ExcludedModels: entry.ExcludedModels,
+			DisableCooling: entry.DisableCooling,
 		}
+		if len(entry.APIKeyEntries) == 0 {
+			id, _ := idGen.Next(idKind, entry.BaseURL)
+			response.AuthIndex = liveIndexByID[id]
+		} else {
+			response.APIKeyEntries = make([]commandCodeAPIKeyWithAuthIndex, len(entry.APIKeyEntries))
+			for j := range entry.APIKeyEntries {
+				apiKeyEntry := entry.APIKeyEntries[j]
+				id, _ := idGen.Next(idKind, apiKeyEntry.APIKey, entry.BaseURL, apiKeyEntry.ProxyURL)
+				response.APIKeyEntries[j] = commandCodeAPIKeyWithAuthIndex{
+					CommandCodeAPIKey: apiKeyEntry,
+					AuthIndex:         liveIndexByID[id],
+				}
+			}
+		}
+		out[i] = response
 	}
 	return out
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 
 	sdkpluginstore "github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginstore"
@@ -146,19 +147,17 @@ func (cfg *Config) SanitizeXAIKeys() {
 
 const defaultCommandCodeBaseURL = "https://api.commandcode.ai"
 
-// SanitizeCommandCodeKeys normalizes CommandCode API key entries.
+// SanitizeCommandCodeKeys normalizes named CommandCode provider blocks.
 // Empty api-key entries are dropped. Empty base-url defaults to the public API host.
+// Enabled blocks with no remaining keys are dropped. Blocks without a name are dropped.
 func (cfg *Config) SanitizeCommandCodeKeys() {
 	if cfg == nil || len(cfg.CommandCodeKey) == 0 {
 		return
 	}
-	out := make([]CommandCodeKey, 0, len(cfg.CommandCodeKey))
+	out := make([]CommandCodeProvider, 0, len(cfg.CommandCodeKey))
 	for i := range cfg.CommandCodeKey {
 		e := cfg.CommandCodeKey[i]
-		e.APIKey = strings.TrimSpace(e.APIKey)
-		if e.APIKey == "" {
-			continue
-		}
+		e.Name = strings.TrimSpace(e.Name)
 		e.Prefix = normalizeModelPrefix(e.Prefix)
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
 		if e.BaseURL == "" {
@@ -166,12 +165,46 @@ func (cfg *Config) SanitizeCommandCodeKeys() {
 		}
 		e.Headers = NormalizeHeaders(e.Headers)
 		e.ExcludedModels = NormalizeExcludedModels(e.ExcludedModels)
-		// CommandCode has no websockets / alpha-search
-		e.Websockets = false
-		e.AlphaSearch = false
+		keys := make([]CommandCodeAPIKey, 0, len(e.APIKeyEntries))
+		for j := range e.APIKeyEntries {
+			k := e.APIKeyEntries[j]
+			k.APIKey = strings.TrimSpace(k.APIKey)
+			k.ProxyURL = strings.TrimSpace(k.ProxyURL)
+			if k.APIKey == "" {
+				continue
+			}
+			keys = append(keys, k)
+		}
+		e.APIKeyEntries = keys
+		if e.Name == "" {
+			continue
+		}
+		if !e.Disabled && len(e.APIKeyEntries) == 0 {
+			continue
+		}
 		out = append(out, e)
 	}
 	cfg.CommandCodeKey = out
+}
+
+// ValidateCommandCodeProviders checks CommandCode provider block invariants after parse.
+func (cfg *Config) ValidateCommandCodeProviders() error {
+	if cfg == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(cfg.CommandCodeKey))
+	for i := range cfg.CommandCodeKey {
+		name := strings.TrimSpace(cfg.CommandCodeKey[i].Name)
+		if name == "" {
+			return fmt.Errorf("commandcode-api-key[%d]: name is required", i)
+		}
+		key := strings.ToLower(name)
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("commandcode-api-key: duplicate name %q", name)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
 }
 
 func sanitizeCodexKeyEntries(entries []CodexKey) []CodexKey {

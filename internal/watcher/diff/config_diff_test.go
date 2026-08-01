@@ -260,26 +260,28 @@ func TestBuildConfigChangeDetails_XAIForceMappingOnly(t *testing.T) {
 }
 
 func TestBuildConfigChangeDetails_CommandCodeKeys(t *testing.T) {
-	oldCfg := &config.Config{CommandCodeKey: []config.CommandCodeKey{{
-		APIKey:         "old-key",
+	oldCfg := &config.Config{CommandCodeKey: []config.CommandCodeProvider{{
+		Name:           "primary",
 		Priority:       1,
 		Prefix:         "old",
 		BaseURL:        "https://old.example.com/v1",
-		ProxyURL:       "http://old-proxy",
-		Websockets:     false,
 		DisableCooling: false,
+		APIKeyEntries: []config.CommandCodeAPIKey{
+			{APIKey: "old-key", ProxyURL: "http://old-proxy"},
+		},
 		Headers:        map[string]string{"X-Test": "old"},
 		Models:         []config.CodexModel{{Name: "model-old", Alias: "m"}},
 		ExcludedModels: []string{"hidden"},
 	}}}
-	newCfg := &config.Config{CommandCodeKey: []config.CommandCodeKey{{
-		APIKey:         "new-key",
+	newCfg := &config.Config{CommandCodeKey: []config.CommandCodeProvider{{
+		Name:           "primary",
 		Priority:       2,
 		Prefix:         "new",
 		BaseURL:        "https://new.example.com/v1",
-		ProxyURL:       "http://new-proxy",
-		Websockets:     true,
 		DisableCooling: true,
+		APIKeyEntries: []config.CommandCodeAPIKey{
+			{APIKey: "new-key", ProxyURL: "http://new-proxy"},
+		},
 		Headers:        map[string]string{"X-Test": "new"},
 		Models:         []config.CodexModel{{Name: "model-new", Alias: "m"}},
 		ExcludedModels: []string{"other"},
@@ -287,22 +289,28 @@ func TestBuildConfigChangeDetails_CommandCodeKeys(t *testing.T) {
 
 	changes := BuildConfigChangeDetails(oldCfg, newCfg)
 	expectContains(t, changes, "commandcode[0].base-url: https://old.example.com -> https://new.example.com")
-	expectContains(t, changes, "commandcode[0].proxy-url: http://old-proxy -> http://new-proxy")
+	expectContains(t, changes, "commandcode[0].api-key-entries[0].proxy-url: http://old-proxy -> http://new-proxy")
 	expectContains(t, changes, "commandcode[0].prefix: old -> new")
 	expectContains(t, changes, "commandcode[0].priority: 1 -> 2")
-	expectContains(t, changes, "commandcode[0].websockets: false -> true")
 	expectContains(t, changes, "commandcode[0].disable-cooling: false -> true")
-	expectContains(t, changes, "commandcode[0].api-key: updated")
+	expectContains(t, changes, "commandcode[0].api-key-entries[0].api-key: updated")
 	expectContains(t, changes, "commandcode[0].headers: updated")
 	expectContains(t, changes, "commandcode[0].models: updated (1 -> 1 entries)")
 	expectContains(t, changes, "commandcode[0].excluded-models: updated (1 -> 1 entries)")
 }
 
 func TestBuildConfigChangeDetails_CommandCodeKeyCount(t *testing.T) {
-	oldCfg := &config.Config{CommandCodeKey: []config.CommandCodeKey{{APIKey: "a"}}}
-	newCfg := &config.Config{CommandCodeKey: []config.CommandCodeKey{{APIKey: "a"}, {APIKey: "b"}}}
+	oldCfg := &config.Config{CommandCodeKey: []config.CommandCodeProvider{{
+		Name: "a", APIKeyEntries: []config.CommandCodeAPIKey{{APIKey: "a"}},
+	}}}
+	newCfg := &config.Config{CommandCodeKey: []config.CommandCodeProvider{{
+		Name: "a", APIKeyEntries: []config.CommandCodeAPIKey{{APIKey: "a"}},
+	}, {
+		Name: "b", APIKeyEntries: []config.CommandCodeAPIKey{{APIKey: "b"}},
+	}}}
 	changes := BuildConfigChangeDetails(oldCfg, newCfg)
-	expectContains(t, changes, "commandcode-api-key count: 1 -> 2")
+	expectContains(t, changes, "commandcode-api-key providers: 1 -> 2")
+	expectContains(t, changes, "commandcode-api-key credentials: 1 -> 2")
 }
 
 func TestBuildConfigChangeDetails_NilSafe(t *testing.T) {

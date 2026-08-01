@@ -355,18 +355,24 @@ func BuildConfigChangeDetails(oldCfg, newCfg *config.Config) []string {
 		}
 	}
 
-	// CommandCode keys (do not print key material)
+	// CommandCode provider blocks (do not print key material)
+	oldCommandCodeKeys := countCommandCodeAPIKeys(oldCfg.CommandCodeKey)
+	newCommandCodeKeys := countCommandCodeAPIKeys(newCfg.CommandCodeKey)
 	if len(oldCfg.CommandCodeKey) != len(newCfg.CommandCodeKey) {
-		changes = append(changes, fmt.Sprintf("commandcode-api-key count: %d -> %d", len(oldCfg.CommandCodeKey), len(newCfg.CommandCodeKey)))
-	} else {
+		changes = append(changes, fmt.Sprintf("commandcode-api-key providers: %d -> %d", len(oldCfg.CommandCodeKey), len(newCfg.CommandCodeKey)))
+	}
+	if oldCommandCodeKeys != newCommandCodeKeys {
+		changes = append(changes, fmt.Sprintf("commandcode-api-key credentials: %d -> %d", oldCommandCodeKeys, newCommandCodeKeys))
+	}
+	if len(oldCfg.CommandCodeKey) == len(newCfg.CommandCodeKey) {
 		for i := range oldCfg.CommandCodeKey {
 			o := oldCfg.CommandCodeKey[i]
 			n := newCfg.CommandCodeKey[i]
+			if strings.TrimSpace(o.Name) != strings.TrimSpace(n.Name) {
+				changes = append(changes, fmt.Sprintf("commandcode[%d].name: %s -> %s", i, strings.TrimSpace(o.Name), strings.TrimSpace(n.Name)))
+			}
 			if strings.TrimSpace(o.BaseURL) != strings.TrimSpace(n.BaseURL) {
 				changes = append(changes, fmt.Sprintf("commandcode[%d].base-url: %s -> %s", i, formatURL(o.BaseURL), formatURL(n.BaseURL)))
-			}
-			if strings.TrimSpace(o.ProxyURL) != strings.TrimSpace(n.ProxyURL) {
-				changes = append(changes, fmt.Sprintf("commandcode[%d].proxy-url: %s -> %s", i, formatProxyURL(o.ProxyURL), formatProxyURL(n.ProxyURL)))
 			}
 			if strings.TrimSpace(o.Prefix) != strings.TrimSpace(n.Prefix) {
 				changes = append(changes, fmt.Sprintf("commandcode[%d].prefix: %s -> %s", i, strings.TrimSpace(o.Prefix), strings.TrimSpace(n.Prefix)))
@@ -374,14 +380,23 @@ func BuildConfigChangeDetails(oldCfg, newCfg *config.Config) []string {
 			if o.Priority != n.Priority {
 				changes = append(changes, fmt.Sprintf("commandcode[%d].priority: %d -> %d", i, o.Priority, n.Priority))
 			}
-			if o.Websockets != n.Websockets {
-				changes = append(changes, fmt.Sprintf("commandcode[%d].websockets: %t -> %t", i, o.Websockets, n.Websockets))
+			if o.Disabled != n.Disabled {
+				changes = append(changes, fmt.Sprintf("commandcode[%d].disabled: %t -> %t", i, o.Disabled, n.Disabled))
 			}
 			if o.DisableCooling != n.DisableCooling {
 				changes = append(changes, fmt.Sprintf("commandcode[%d].disable-cooling: %t -> %t", i, o.DisableCooling, n.DisableCooling))
 			}
-			if strings.TrimSpace(o.APIKey) != strings.TrimSpace(n.APIKey) {
-				changes = append(changes, fmt.Sprintf("commandcode[%d].api-key: updated", i))
+			if len(o.APIKeyEntries) != len(n.APIKeyEntries) {
+				changes = append(changes, fmt.Sprintf("commandcode[%d].api-key-entries: %d -> %d", i, len(o.APIKeyEntries), len(n.APIKeyEntries)))
+			} else {
+				for j := range o.APIKeyEntries {
+					if strings.TrimSpace(o.APIKeyEntries[j].APIKey) != strings.TrimSpace(n.APIKeyEntries[j].APIKey) {
+						changes = append(changes, fmt.Sprintf("commandcode[%d].api-key-entries[%d].api-key: updated", i, j))
+					}
+					if strings.TrimSpace(o.APIKeyEntries[j].ProxyURL) != strings.TrimSpace(n.APIKeyEntries[j].ProxyURL) {
+						changes = append(changes, fmt.Sprintf("commandcode[%d].api-key-entries[%d].proxy-url: %s -> %s", i, j, formatProxyURL(o.APIKeyEntries[j].ProxyURL), formatProxyURL(n.APIKeyEntries[j].ProxyURL)))
+					}
+				}
 			}
 			if !equalStringMap(o.Headers, n.Headers) {
 				changes = append(changes, fmt.Sprintf("commandcode[%d].headers: updated", i))
@@ -519,6 +534,17 @@ func equalStringMap(a, b map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func countCommandCodeAPIKeys(blocks []config.CommandCodeProvider) int {
+	total := 0
+	for i := range blocks {
+		if blocks[i].Disabled {
+			continue
+		}
+		total += len(blocks[i].APIKeyEntries)
+	}
+	return total
 }
 
 func displayOptionalValue(raw string) string {

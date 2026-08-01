@@ -409,14 +409,17 @@ func TestConfigSynthesizer_CommandCodeKeys(t *testing.T) {
 	synth := NewConfigSynthesizer()
 	ctx := &SynthesisContext{
 		Config: &config.Config{
-			CommandCodeKey: []config.CommandCodeKey{{
-				APIKey:         "user_commandcode_key",
+			CommandCodeKey: []config.CommandCodeProvider{{
+				Name:           "primary",
 				Prefix:         "cc",
 				BaseURL:        "https://api.commandcode.ai",
-				ProxyURL:       "http://proxy.local",
 				DisableCooling: true,
 				Headers:        map[string]string{"X-Custom": "value"},
 				Models:         []config.CodexModel{{Name: "deepseek-flash", Alias: "ds-flash"}},
+				APIKeyEntries: []config.CommandCodeAPIKey{
+					{APIKey: "user_commandcode_key", ProxyURL: "http://proxy.local"},
+					{APIKey: "user_commandcode_key_2"},
+				},
 			}},
 		},
 		Now:         time.Now(),
@@ -427,8 +430,11 @@ func TestConfigSynthesizer_CommandCodeKeys(t *testing.T) {
 	if errSynthesize != nil {
 		t.Fatalf("Synthesize() error = %v", errSynthesize)
 	}
-	if len(auths) != 1 {
-		t.Fatalf("auth count = %d, want 1", len(auths))
+	if len(auths) != 2 {
+		t.Fatalf("auth count = %d, want 2", len(auths))
+	}
+	if auths[0].Attributes["config_name"] != "primary" || auths[1].Attributes["config_name"] != "primary" {
+		t.Fatalf("config_name missing: %#v %#v", auths[0].Attributes, auths[1].Attributes)
 	}
 	auth := auths[0]
 	if auth.Provider != "commandcode" {
@@ -853,9 +859,14 @@ func TestConfigSynthesizer_RejectsInvalidWeightsForAllAPIKeyTypes(t *testing.T) 
 			wantPath: "xai-api-key[0].weight",
 		},
 		{
-			name:     "commandcode",
-			cfg:      &config.Config{CommandCodeKey: []config.CommandCodeKey{{APIKey: "key", Weight: &invalidWeight}}},
-			wantPath: "commandcode-api-key[0].weight",
+			name: "commandcode",
+			cfg: &config.Config{CommandCodeKey: []config.CommandCodeProvider{{
+				Name: "primary",
+				APIKeyEntries: []config.CommandCodeAPIKey{
+					{APIKey: "key", Weight: &invalidWeight},
+				},
+			}}},
+			wantPath: "commandcode-api-key[0].api-key-entries[0].weight",
 		},
 		{
 			name: "openai compatibility",
@@ -936,7 +947,12 @@ func TestConfigSynthesizer_PropagatesWeightsForAllAPIKeyTypes(t *testing.T) {
 			ClaudeKey:       []config.ClaudeKey{{APIKey: "claude", Weight: weight(3)}},
 			CodexKey:        []config.CodexKey{{APIKey: "codex", Weight: weight(4)}},
 			XAIKey:          []config.XAIKey{{APIKey: "xai", Weight: weight(5)}},
-			CommandCodeKey:  []config.CommandCodeKey{{APIKey: "commandcode", Weight: weight(6)}},
+			CommandCodeKey: []config.CommandCodeProvider{{
+				Name: "primary",
+				APIKeyEntries: []config.CommandCodeAPIKey{
+					{APIKey: "commandcode", Weight: weight(6)},
+				},
+			}},
 			OpenAICompatibility: []config.OpenAICompatibility{{
 				Name:    "compat",
 				BaseURL: "https://compat.example.com",
@@ -982,8 +998,8 @@ func TestConfigSynthesizer_AllProviders(t *testing.T) {
 			XAIKey: []config.XAIKey{
 				{APIKey: "xai-key"},
 			},
-			CommandCodeKey: []config.CommandCodeKey{
-				{APIKey: "commandcode-key"},
+			CommandCodeKey: []config.CommandCodeProvider{
+				{Name: "primary", APIKeyEntries: []config.CommandCodeAPIKey{{APIKey: "commandcode-key"}}},
 			},
 			OpenAICompatibility: []config.OpenAICompatibility{
 				{Name: "compat", BaseURL: "https://compat.api"},

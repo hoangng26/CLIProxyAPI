@@ -588,8 +588,54 @@ func proxyURLFromAPIKeyConfig(cfg *config.Config, auth *coreauth.Auth) string {
 			return strings.TrimSpace(entry.ProxyURL)
 		}
 	case "commandcode":
-		if entry := resolveAPIKeyConfig(cfg.CommandCodeKey, auth); entry != nil {
-			return strings.TrimSpace(entry.ProxyURL)
+		return resolveCommandCodeProxyURL(cfg, auth)
+	}
+	return ""
+}
+
+func resolveCommandCodeProxyURL(cfg *config.Config, auth *coreauth.Auth) string {
+	if cfg == nil || auth == nil {
+		return ""
+	}
+	attrKey, attrBase, configName := "", "", ""
+	if auth.Attributes != nil {
+		attrKey = strings.TrimSpace(auth.Attributes["api_key"])
+		attrBase = strings.TrimSpace(auth.Attributes["base_url"])
+		configName = strings.TrimSpace(auth.Attributes["config_name"])
+	}
+	matchBlock := func(block config.CommandCodeProvider) bool {
+		if configName != "" && !strings.EqualFold(strings.TrimSpace(block.Name), configName) {
+			return false
+		}
+		if attrBase != "" && strings.TrimSpace(block.BaseURL) != "" && !strings.EqualFold(strings.TrimSpace(block.BaseURL), attrBase) {
+			return false
+		}
+		if attrKey == "" {
+			return configName != "" || attrBase != ""
+		}
+		for j := range block.APIKeyEntries {
+			if strings.EqualFold(strings.TrimSpace(block.APIKeyEntries[j].APIKey), attrKey) {
+				return true
+			}
+		}
+		return false
+	}
+	for i := range cfg.CommandCodeKey {
+		block := cfg.CommandCodeKey[i]
+		if !matchBlock(block) {
+			continue
+		}
+		for j := range block.APIKeyEntries {
+			entry := block.APIKeyEntries[j]
+			if attrKey != "" && !strings.EqualFold(strings.TrimSpace(entry.APIKey), attrKey) {
+				continue
+			}
+			if proxy := strings.TrimSpace(entry.ProxyURL); proxy != "" {
+				return proxy
+			}
+			if attrKey != "" {
+				return ""
+			}
 		}
 	}
 	return ""

@@ -30,7 +30,7 @@ func validateCredentialWeightYAML(data []byte) error {
 	root := document.Content[0]
 	families := map[string]struct{}{
 		"gemini-api-key": {}, "interactions-api-key": {}, "claude-api-key": {},
-		"vertex-api-key": {}, "codex-api-key": {}, "xai-api-key": {}, "commandcode-api-key": {},
+		"vertex-api-key": {}, "codex-api-key": {}, "xai-api-key": {},
 	}
 	for index := 0; root != nil && root.Kind == yaml.MappingNode && index+1 < len(root.Content); index += 2 {
 		name := root.Content[index].Value
@@ -43,6 +43,12 @@ func validateCredentialWeightYAML(data []byte) error {
 		}
 		if name == "openai-compatibility" {
 			if errValidate := validateOpenAICompatibilityWeightNodes(value); errValidate != nil {
+				return errValidate
+			}
+			continue
+		}
+		if name == "commandcode-api-key" {
+			if errValidate := validateCommandCodeShapeAndWeightNodes(value); errValidate != nil {
 				return errValidate
 			}
 		}
@@ -86,6 +92,39 @@ func validateWeightMappingNode(mapping *yaml.Node, path string) error {
 }
 
 func validateOpenAICompatibilityWeightNodes(sequence *yaml.Node) error {
+	return validateNestedAPIKeyEntryWeightNodes(sequence, "openai-compatibility")
+}
+
+func validateCommandCodeShapeAndWeightNodes(sequence *yaml.Node) error {
+	if sequence == nil || sequence.Kind != yaml.SequenceNode {
+		return nil
+	}
+	for providerIndex, provider := range sequence.Content {
+		if provider == nil || provider.Kind != yaml.MappingNode {
+			continue
+		}
+		hasAPIKey := false
+		hasAPIKeyEntries := false
+		for index := 0; index+1 < len(provider.Content); index += 2 {
+			switch provider.Content[index].Value {
+			case "api-key":
+				hasAPIKey = true
+			case "api-key-entries":
+				hasAPIKeyEntries = true
+				path := fmt.Sprintf("commandcode-api-key[%d].api-key-entries", providerIndex)
+				if errValidate := validateWeightSequenceNode(provider.Content[index+1], path); errValidate != nil {
+					return errValidate
+				}
+			}
+		}
+		if hasAPIKey && !hasAPIKeyEntries {
+			return fmt.Errorf("commandcode-api-key: legacy single-key shape is no longer supported; use name + api-key-entries")
+		}
+	}
+	return nil
+}
+
+func validateNestedAPIKeyEntryWeightNodes(sequence *yaml.Node, family string) error {
 	if sequence == nil || sequence.Kind != yaml.SequenceNode {
 		return nil
 	}
@@ -97,7 +136,7 @@ func validateOpenAICompatibilityWeightNodes(sequence *yaml.Node) error {
 			if provider.Content[index].Value != "api-key-entries" {
 				continue
 			}
-			path := fmt.Sprintf("openai-compatibility[%d].api-key-entries", providerIndex)
+			path := fmt.Sprintf("%s[%d].api-key-entries", family, providerIndex)
 			if errValidate := validateWeightSequenceNode(provider.Content[index+1], path); errValidate != nil {
 				return errValidate
 			}
@@ -141,9 +180,12 @@ func (cfg *Config) ValidateCredentialWeights() error {
 			return fmt.Errorf("xai-api-key[%d].weight: %w", index, errValidate)
 		}
 	}
-	for index := range cfg.CommandCodeKey {
-		if errValidate := ValidateCredentialWeight(cfg.CommandCodeKey[index].Weight); errValidate != nil {
-			return fmt.Errorf("commandcode-api-key[%d].weight: %w", index, errValidate)
+	for providerIndex := range cfg.CommandCodeKey {
+		for keyIndex := range cfg.CommandCodeKey[providerIndex].APIKeyEntries {
+			weight := cfg.CommandCodeKey[providerIndex].APIKeyEntries[keyIndex].Weight
+			if errValidate := ValidateCredentialWeight(weight); errValidate != nil {
+				return fmt.Errorf("commandcode-api-key[%d].api-key-entries[%d].weight: %w", providerIndex, keyIndex, errValidate)
+			}
 		}
 	}
 	for providerIndex := range cfg.OpenAICompatibility {

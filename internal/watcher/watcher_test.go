@@ -68,10 +68,12 @@ func TestBuildAPIKeyClientsCounts(t *testing.T) {
 		VertexCompatAPIKey: []config.VertexCompatKey{
 			{APIKey: "v1"},
 		},
-		ClaudeKey:      []config.ClaudeKey{{APIKey: "c1"}},
-		CodexKey:       []config.CodexKey{{APIKey: "c1"}, {APIKey: "c2"}},
-		XAIKey:         []config.XAIKey{{APIKey: "x1"}},
-		CommandCodeKey: []config.CommandCodeKey{{APIKey: "cc1"}},
+		ClaudeKey: []config.ClaudeKey{{APIKey: "c1"}},
+		CodexKey:  []config.CodexKey{{APIKey: "c1"}, {APIKey: "c2"}},
+		XAIKey:    []config.XAIKey{{APIKey: "x1"}},
+		CommandCodeKey: []config.CommandCodeProvider{{
+			Name: "primary", APIKeyEntries: []config.CommandCodeAPIKey{{APIKey: "cc1"}},
+		}},
 		OpenAICompatibility: []config.OpenAICompatibility{
 			{APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "o1"}, {APIKey: "o2"}}},
 		},
