@@ -3,7 +3,7 @@
 # Required GitHub Secrets:
 #   REGISTRY_HOST, REGISTRY_USERNAME, REGISTRY_PASSWORD
 #   VPS_HOST, VPS_USER, VPS_PASSWORD, VPS_COMPOSE_PATH
-# Optional:
+# Optional (vars preferred, secrets fallback):
 #   VPS_PORT (default 22), VPS_COMPOSE_FILE (default docker-compose.yml)
 #
 # Tag push v*: build linux/amd64 → push registry → SSH compose pull/up
@@ -26,6 +26,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: cliproxyapi/cli-proxy-api
@@ -79,9 +83,18 @@ jobs:
     steps:
       - name: Resolve image tag
         id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "image_tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$INPUT_TAG" in
+              ''|*[!A-Za-z0-9._-]*)
+                echo "invalid image tag: ${INPUT_TAG}"
+                exit 1
+                ;;
+            esac
+            echo "image_tag=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
           else
             echo "image_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
@@ -93,18 +106,22 @@ jobs:
           REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           VPS_COMPOSE_PATH: ${{ secrets.VPS_COMPOSE_PATH }}
-          VPS_COMPOSE_FILE: ${{ secrets.VPS_COMPOSE_FILE }}
+          VPS_COMPOSE_FILE: ${{ vars.VPS_COMPOSE_FILE || secrets.VPS_COMPOSE_FILE }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ vars.VPS_PORT || secrets.VPS_PORT || 22 }}
           envs: REGISTRY_HOST,REGISTRY_USERNAME,REGISTRY_PASSWORD,VPS_COMPOSE_PATH,VPS_COMPOSE_FILE,IMAGE_NAME,IMAGE_TAG
           script_stop: true
           script: |
             set -euo pipefail
+            if [ -z "${VPS_COMPOSE_PATH:-}" ] || [ ! -d "${VPS_COMPOSE_PATH}" ]; then
+              echo "VPS_COMPOSE_PATH missing or not a directory"
+              exit 1
+            fi
             COMPOSE_FILE="${VPS_COMPOSE_FILE:-docker-compose.yml}"
             echo "${REGISTRY_PASSWORD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
             cd "${VPS_COMPOSE_PATH}"
@@ -113,4 +130,4 @@ jobs:
             docker compose -f "${COMPOSE_FILE}" pull cli-proxy-api
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
             docker compose -f "${COMPOSE_FILE}" ps
-            docker compose -f "${COMPOSE_FILE}" ps --status running | grep -q cli-proxy-api
+            docker compose -f "${COMPOSE_FILE}" ps --status running --services | grep -qx cli-proxy-api
