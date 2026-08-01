@@ -121,6 +121,8 @@ func commandCodeBuiltinModels() []*ModelInfo {
 	pairs := []pair{
 		{"deepseek/deepseek-v4-pro", "DeepSeek V4 Pro"},
 		{"deepseek/deepseek-v4-flash", "DeepSeek V4 Flash"},
+		{"xiaomi/mimo-v2.5", "Mimo V2.5"},
+		{"xiaomi/mimo-v2.5-pro", "Mimo V2.5 Pro"},
 		{"moonshotai/Kimi-K2.6", "Kimi K2.6"},
 		{"moonshotai/Kimi-K2.5", "Kimi K2.5"},
 		{"zai-org/GLM-5.1", "GLM 5.1"},
