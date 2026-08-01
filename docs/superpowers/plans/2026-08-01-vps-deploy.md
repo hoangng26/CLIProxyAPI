@@ -115,7 +115,7 @@ EOF
   - `REGISTRY_HOST`, `REGISTRY_USERNAME`, `REGISTRY_PASSWORD`
   - `VPS_HOST`, `VPS_USER`, `VPS_PASSWORD`
   - `VPS_COMPOSE_PATH`
-- Optional secrets/vars: `VPS_PORT` (default 22), `VPS_COMPOSE_FILE` (default `docker-compose.yml`)
+- Optional vars/secrets: `VPS_PORT` (default 22), `VPS_COMPOSE_FILE` (default `docker-compose.yml`) — vars preferred, secrets fallback
 
 - [ ] **Step 1: Create workflow file**
 
@@ -127,7 +127,7 @@ Create `.github/workflows/deploy-vps.yml` with exactly:
 # Required GitHub Secrets:
 #   REGISTRY_HOST, REGISTRY_USERNAME, REGISTRY_PASSWORD
 #   VPS_HOST, VPS_USER, VPS_PASSWORD, VPS_COMPOSE_PATH
-# Optional:
+# Optional (vars preferred, secrets fallback):
 #   VPS_PORT (default 22), VPS_COMPOSE_FILE (default docker-compose.yml)
 #
 # Tag push v*: build linux/amd64 → push registry → SSH compose pull/up
@@ -150,6 +150,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: cliproxyapi/cli-proxy-api
@@ -203,9 +207,18 @@ jobs:
     steps:
       - name: Resolve image tag
         id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "image_tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$INPUT_TAG" in
+              ''|*[!A-Za-z0-9._-]*)
+                echo "invalid image tag: ${INPUT_TAG}"
+                exit 1
+                ;;
+            esac
+            echo "image_tag=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
           else
             echo "image_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
@@ -217,18 +230,22 @@ jobs:
           REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           VPS_COMPOSE_PATH: ${{ secrets.VPS_COMPOSE_PATH }}
-          VPS_COMPOSE_FILE: ${{ secrets.VPS_COMPOSE_FILE }}
+          VPS_COMPOSE_FILE: ${{ vars.VPS_COMPOSE_FILE || secrets.VPS_COMPOSE_FILE }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ vars.VPS_PORT || secrets.VPS_PORT || 22 }}
           envs: REGISTRY_HOST,REGISTRY_USERNAME,REGISTRY_PASSWORD,VPS_COMPOSE_PATH,VPS_COMPOSE_FILE,IMAGE_NAME,IMAGE_TAG
           script_stop: true
           script: |
             set -euo pipefail
+            if [ -z "${VPS_COMPOSE_PATH:-}" ] || [ ! -d "${VPS_COMPOSE_PATH}" ]; then
+              echo "VPS_COMPOSE_PATH missing or not a directory"
+              exit 1
+            fi
             COMPOSE_FILE="${VPS_COMPOSE_FILE:-docker-compose.yml}"
             echo "${REGISTRY_PASSWORD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
             cd "${VPS_COMPOSE_PATH}"
@@ -237,7 +254,7 @@ jobs:
             docker compose -f "${COMPOSE_FILE}" pull cli-proxy-api
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
             docker compose -f "${COMPOSE_FILE}" ps
-            docker compose -f "${COMPOSE_FILE}" ps --status running | grep -q cli-proxy-api
+            docker compose -f "${COMPOSE_FILE}" ps --status running --services | grep -qx cli-proxy-api
 ```
 
 - [ ] **Step 2: Static checks — no secrets in tree**
@@ -245,8 +262,8 @@ jobs:
 Run:
 
 ```bash
-# Must find ZERO matches for the chat-shared password or obvious secret material
-! grep -RInE 'Gi@ng07082002|REGISTRY_PASSWORD:\s*['\''\"][^$]' deploy .github/workflows/deploy-vps.yml
+# Must find ZERO matches for hardcoded password literals or obvious secret material
+! grep -RInE 'REGISTRY_PASSWORD:\s*['\''\"][^$]|password:\s*['\''\"][^${]' deploy .github/workflows/deploy-vps.yml
 # Workflow must reference secrets, not literals for host/user
 grep -n 'secrets.REGISTRY_HOST\|secrets.VPS_HOST\|secrets.VPS_PASSWORD' .github/workflows/deploy-vps.yml
 # Public docker workflow untouched
@@ -352,7 +369,7 @@ GitHub repo → Settings → Secrets and variables → Actions
   VPS_USER=<ssh user>
   VPS_PASSWORD=<ssh password>
   VPS_COMPOSE_PATH=<absolute path on VPS>
-  optional: VPS_PORT=22, VPS_COMPOSE_FILE=docker-compose.yml
+  optional vars (or secrets): VPS_PORT=22, VPS_COMPOSE_FILE=docker-compose.yml
 
 VPS one-time:
   1. Install Docker + compose plugin
@@ -399,7 +416,11 @@ Expected: clean working tree (or only unrelated WIP)
 ## Self-review notes
 
 - No TBD/placeholder steps
-- `VPS_COMPOSE_FILE` read from secrets with default in remote script (`${VPS_COMPOSE_FILE:-docker-compose.yml}`) — empty secret is fine
+- `VPS_COMPOSE_FILE` from `vars` then `secrets`, default in remote script (`${VPS_COMPOSE_FILE:-docker-compose.yml}`) — empty is fine
+- Image tag from env + allowlist on `workflow_dispatch` (no raw `${{ inputs.tag }}` shell interpolation)
+- `concurrency.group: deploy-vps` with `cancel-in-progress: false` serializes deploys
+- Remote script fails fast if `VPS_COMPOSE_PATH` missing/not a directory
+- Running check: `docker compose ps --status running --services | grep -qx cli-proxy-api`
 - `needs.build-and-push` + `if: always() && (...)` matches design for skipped build on dispatch
-- `port: ${{ secrets.VPS_PORT || 22 }}` — if empty secret unsupported on some GH versions, operator can set `VPS_PORT=22` explicitly
+- `port: ${{ vars.VPS_PORT || secrets.VPS_PORT || 22 }}` — vars preferred
 - No live deploy test in CI without operator secrets — verification is static + operator checklist
