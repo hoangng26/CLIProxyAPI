@@ -1,13 +1,13 @@
 name: auto-retarget-main-pr-to-dev
 
-on:
-  pull_request_target:
-    types:
-      - opened
-      - reopened
-      - edited
-    branches:
-      - main
+# on:
+  # pull_request_target:
+  #   types:
+  #     - opened
+  #     - reopened
+  #     - edited
+  #   branches:
+  #     - main
 
 permissions:
   contents: read

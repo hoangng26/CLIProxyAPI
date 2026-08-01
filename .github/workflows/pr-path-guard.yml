@@ -1,11 +1,11 @@
 name: translator-path-guard
 
-on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
+# on:
+#   pull_request:
+#     types:
+#       - opened
+#       - synchronize
+#       - reopened
 
 jobs:
   ensure-no-translator-changes:
