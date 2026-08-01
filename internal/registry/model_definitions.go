@@ -110,6 +110,41 @@ func GetXAIModels() []*ModelInfo {
 	return WithXAIBuiltins(cloneModelInfos(getModels().XAI))
 }
 
+// GetCommandCodeModels returns built-in CommandCode model definitions.
+func GetCommandCodeModels() []*ModelInfo {
+	return cloneModelInfos(commandCodeBuiltinModels())
+}
+
+func commandCodeBuiltinModels() []*ModelInfo {
+	// IDs from 9router open-sse/providers/registry/commandcode.js
+	type pair struct{ id, name string }
+	pairs := []pair{
+		{"deepseek/deepseek-v4-pro", "DeepSeek V4 Pro"},
+		{"deepseek/deepseek-v4-flash", "DeepSeek V4 Flash"},
+		{"moonshotai/Kimi-K2.6", "Kimi K2.6"},
+		{"moonshotai/Kimi-K2.5", "Kimi K2.5"},
+		{"zai-org/GLM-5.1", "GLM 5.1"},
+		{"zai-org/GLM-5", "GLM 5"},
+		{"MiniMaxAI/MiniMax-M2.7", "MiniMax M2.7"},
+		{"MiniMaxAI/MiniMax-M2.5", "MiniMax M2.5"},
+		{"Qwen/Qwen3.6-Max-Preview", "Qwen 3.6 Max Preview"},
+		{"Qwen/Qwen3.6-Plus", "Qwen 3.6 Plus"},
+		{"stepfun/Step-3.5-Flash", "Step 3.5 Flash"},
+	}
+	out := make([]*ModelInfo, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, &ModelInfo{
+			ID:          p.id,
+			Object:      "model",
+			DisplayName: p.name,
+			OwnedBy:     "commandcode",
+			Type:        "commandcode",
+			Name:        p.id,
+		})
+	}
+	return out
+}
+
 // WithCodexBuiltins injects hard-coded Codex-only model definitions that should
 // not depend on remote models.json updates. Built-ins replace any matching IDs
 // already present in the provided slice.
@@ -277,6 +312,7 @@ func cloneModelInfos(models []*ModelInfo) []*ModelInfo {
 //   - kimi
 //   - antigravity
 //   - xai
+//   - commandcode
 func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 	key := strings.ToLower(strings.TrimSpace(channel))
 	switch key {
@@ -296,6 +332,8 @@ func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 		return GetAntigravityModels()
 	case "xai", "x-ai", "grok":
 		return GetXAIModels()
+	case "commandcode":
+		return GetCommandCodeModels()
 	default:
 		return nil
 	}

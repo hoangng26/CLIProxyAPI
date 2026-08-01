@@ -50,6 +50,64 @@ func TestWithXAIBuiltinsIncludesVideoPreviewModel(t *testing.T) {
 	t.Fatalf("expected xAI builtin model %s", xaiBuiltinVideo15PreviewModelID)
 }
 
+func TestGetCommandCodeModelsIncludesDeepSeek(t *testing.T) {
+	models := GetCommandCodeModels()
+	found := false
+	for _, m := range models {
+		if m != nil && m.ID == "deepseek/deepseek-v4-pro" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("missing deepseek/deepseek-v4-pro")
+	}
+}
+
+func TestGetCommandCodeModelsCatalog(t *testing.T) {
+	wantIDs := []string{
+		"deepseek/deepseek-v4-pro",
+		"deepseek/deepseek-v4-flash",
+		"moonshotai/Kimi-K2.6",
+		"moonshotai/Kimi-K2.5",
+		"zai-org/GLM-5.1",
+		"zai-org/GLM-5",
+		"MiniMaxAI/MiniMax-M2.7",
+		"MiniMaxAI/MiniMax-M2.5",
+		"Qwen/Qwen3.6-Max-Preview",
+		"Qwen/Qwen3.6-Plus",
+		"stepfun/Step-3.5-Flash",
+	}
+	models := GetCommandCodeModels()
+	if len(models) != len(wantIDs) {
+		t.Fatalf("model count = %d, want %d", len(models), len(wantIDs))
+	}
+	got := make(map[string]*ModelInfo, len(models))
+	for _, m := range models {
+		if m == nil {
+			t.Fatal("nil model in catalog")
+		}
+		if m.Object != "model" {
+			t.Fatalf("ID %q Object = %q, want model", m.ID, m.Object)
+		}
+		if m.OwnedBy != "commandcode" {
+			t.Fatalf("ID %q OwnedBy = %q, want commandcode", m.ID, m.OwnedBy)
+		}
+		if m.Type != "commandcode" {
+			t.Fatalf("ID %q Type = %q, want commandcode", m.ID, m.Type)
+		}
+		if m.DisplayName == "" {
+			t.Fatalf("ID %q missing DisplayName", m.ID)
+		}
+		got[m.ID] = m
+	}
+	for _, id := range wantIDs {
+		if _, ok := got[id]; !ok {
+			t.Errorf("missing model %q", id)
+		}
+	}
+}
+
 func TestAntigravityWebSearchModelForRequiresRequestedModelCapability(t *testing.T) {
 	registryRef := GetGlobalRegistry()
 	registryRef.RegisterClient("test-antigravity-websearch-route", "antigravity", []*ModelInfo{

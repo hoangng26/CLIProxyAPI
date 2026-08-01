@@ -13,7 +13,7 @@ import (
 )
 
 // ConfigSynthesizer generates Auth entries from configuration API keys.
-// It handles Gemini, Interactions, Claude, Codex, xAI, OpenAI-compat, and Vertex-compat providers.
+// It handles Gemini, Interactions, Claude, Codex, xAI, CommandCode, OpenAI-compat, and Vertex-compat providers.
 type ConfigSynthesizer struct{}
 
 // NewConfigSynthesizer creates a new ConfigSynthesizer instance.
@@ -52,6 +52,8 @@ func (s *ConfigSynthesizer) Synthesize(ctx *SynthesisContext) ([]*coreauth.Auth,
 	out = append(out, s.synthesizeCodexKeys(ctx)...)
 	// xAI API Keys
 	out = append(out, s.synthesizeXAIKeys(ctx)...)
+	// CommandCode API Keys
+	out = append(out, s.synthesizeCommandCodeKeys(ctx)...)
 	// OpenAI-compat
 	out = append(out, s.synthesizeOpenAICompat(ctx)...)
 	// Vertex-compat
@@ -196,6 +198,11 @@ func (s *ConfigSynthesizer) synthesizeCodexKeys(ctx *SynthesisContext) []*coreau
 // synthesizeXAIKeys creates Auth entries for xAI API keys.
 func (s *ConfigSynthesizer) synthesizeXAIKeys(ctx *SynthesisContext) []*coreauth.Auth {
 	return s.synthesizeCodexStyleKeys(ctx, ctx.Config.XAIKey, "xai")
+}
+
+// synthesizeCommandCodeKeys creates Auth entries for CommandCode API keys.
+func (s *ConfigSynthesizer) synthesizeCommandCodeKeys(ctx *SynthesisContext) []*coreauth.Auth {
+	return s.synthesizeCodexStyleKeys(ctx, ctx.Config.CommandCodeKey, "commandcode")
 }
 
 func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entries []config.CodexKey, provider string) []*coreauth.Auth {

@@ -136,6 +136,10 @@ func compileAPIKeyModelCapabilitiesForAuth(cfg *internalconfig.Config, auth *Aut
 		if entry := resolveXAIAPIKeyConfig(cfg, auth); entry != nil {
 			compileConfiguredModelCapabilities(out, entry.Models, "xai")
 		}
+	case "commandcode":
+		if entry := resolveCommandCodeAPIKeyConfig(cfg, auth); entry != nil {
+			compileConfiguredModelCapabilities(out, entry.Models, "commandcode")
+		}
 	case "vertex":
 		if entry := resolveVertexAPIKeyConfig(cfg, auth); entry != nil {
 			compileConfiguredModelCapabilities(out, entry.Models, "gemini")

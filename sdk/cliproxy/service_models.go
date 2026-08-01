@@ -155,6 +155,17 @@ func (s *Service) registerModelsForAuthWithCache(ctx context.Context, a *coreaut
 			}
 		}
 		models = applyExcludedModels(models, excluded)
+	case constant.CommandCode:
+		models = registry.GetCommandCodeModels()
+		if entry := s.resolveConfigCommandCodeKey(a); entry != nil {
+			if len(entry.Models) > 0 {
+				models = buildCommandCodeConfigModels(entry)
+			}
+			if authKind == "apikey" {
+				excluded = entry.ExcludedModels
+			}
+		}
+		models = applyExcludedModels(models, excluded)
 	default:
 		// Handle OpenAI-compatibility providers by name using config
 		if s.cfg != nil {
@@ -494,6 +505,13 @@ func (s *Service) resolveConfigXAIKey(auth *coreauth.Auth) *config.XAIKey {
 	return resolveConfigCodexStyleKey(auth, s.cfg.XAIKey, false)
 }
 
+func (s *Service) resolveConfigCommandCodeKey(auth *coreauth.Auth) *config.CommandCodeKey {
+	if s == nil || s.cfg == nil {
+		return nil
+	}
+	return resolveConfigCodexStyleKey(auth, s.cfg.CommandCodeKey, false)
+}
+
 func resolveConfigCodexStyleKey(auth *coreauth.Auth, entries []config.CodexKey, validateIndexCredentials bool) *config.CodexKey {
 	if auth == nil {
 		return nil
@@ -798,6 +816,13 @@ func buildXAIConfigModels(entry *config.XAIKey) []*ModelInfo {
 		return nil
 	}
 	return buildConfigModels(entry.Models, "xai", "xai")
+}
+
+func buildCommandCodeConfigModels(entry *config.CommandCodeKey) []*ModelInfo {
+	if entry == nil {
+		return nil
+	}
+	return buildConfigModels(entry.Models, "commandcode", "commandcode")
 }
 
 func buildCodexConfigModels(entry *config.CodexKey) []*ModelInfo {

@@ -58,6 +58,15 @@ func TestBuildConfigModelsDisplayName(t *testing.T) {
 				}}})[0]
 			},
 		},
+		{
+			name: "commandcode",
+			want: "CommandCode Catalog Name",
+			got: func() *ModelInfo {
+				return buildCommandCodeConfigModels(&config.CommandCodeKey{Models: []config.CommandCodeModel{{
+					Name: "deepseek/deepseek-v4-flash", Alias: "ds-flash", DisplayName: "CommandCode Catalog Name",
+				}}})[0]
+			},
+		},
 	}
 
 	for _, tt := range tests {

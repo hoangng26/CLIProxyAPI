@@ -374,6 +374,22 @@ nonstream-keepalive-interval: 0
 #       - "grok-4.1"             # exclude specific models (exact match)
 #       - "grok-3-*"             # wildcard matching prefix
 
+# CommandCode API keys (CLI key starts with user_... from ~/.commandcode/auth.json or commandcode.ai/studio)
+# Uses the native CommandCode executor (custom /alpha/generate + NDJSON stream).
+# v1: OpenAI-compatible clients (/v1/chat/completions) only.
+# commandcode-api-key:
+#   - api-key: "user_..."
+#     weight: 1
+#     prefix: "cmc" # optional: require calls like "cmc/deepseek-v4-flash"
+#     base-url: "https://api.commandcode.ai" # optional; default shown
+#     proxy-url: ""
+#     headers: {}
+#     models: # optional; omit to use built-in default catalog
+#       - name: "deepseek/deepseek-v4-pro"
+#         alias: "deepseek-v4-pro"
+#         display-name: "DeepSeek V4 Pro"
+#     excluded-models: []
+
 # Claude API keys
 # claude-api-key:
 #   - api-key: "sk-atSM..." # use the official claude API key, no need to set the base url
@@ -501,7 +517,7 @@ nonstream-keepalive-interval: 0
 # Global OAuth model name aliases (per channel)
 # These aliases rename model IDs for both model listing and request routing.
 # Supported channels: vertex, aistudio, antigravity, claude, codex, kimi, xai.
-# NOTE: Aliases do not apply to gemini-api-key, interactions-api-key, codex-api-key, xai-api-key, claude-api-key, openai-compatibility, or vertex-api-key.
+# NOTE: Aliases do not apply to gemini-api-key, interactions-api-key, codex-api-key, xai-api-key, commandcode-api-key, claude-api-key, openai-compatibility, or vertex-api-key.
 # NOTE: Because aliases affect the merged /v1 model list and merged request routing, overlapping
 # client-visible names can become ambiguous across providers. For strict backend pinning, use
 # unique aliases/prefixes or avoid overlapping names.

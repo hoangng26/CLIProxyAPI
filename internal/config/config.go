@@ -112,6 +112,9 @@ type Config struct {
 	// XAIKey defines xAI API key configurations using the same structure as Codex API keys.
 	XAIKey []XAIKey `yaml:"xai-api-key" json:"xai-api-key"`
 
+	// CommandCodeKey defines CommandCode API key configurations using the same structure as Codex API keys.
+	CommandCodeKey []CommandCodeKey `yaml:"commandcode-api-key" json:"commandcode-api-key"`
+
 	// XAI configures provider-wide xAI request behavior.
 	XAI XAIConfig `yaml:"xai" json:"xai"`
 
@@ -152,7 +155,7 @@ type Config struct {
 	// vertex, aistudio, antigravity, claude, codex, kimi, xai.
 	//
 	// NOTE: This does not apply to existing per-credential model alias features under:
-	// gemini-api-key, interactions-api-key, codex-api-key, xai-api-key, claude-api-key, openai-compatibility, and vertex-api-key.
+	// gemini-api-key, interactions-api-key, codex-api-key, xai-api-key, commandcode-api-key, claude-api-key, openai-compatibility, and vertex-api-key.
 	OAuthModelAlias map[string][]OAuthModelAlias `yaml:"oauth-model-alias,omitempty" json:"oauth-model-alias,omitempty"`
 
 	// Payload defines default and override rules for provider payload parameters.

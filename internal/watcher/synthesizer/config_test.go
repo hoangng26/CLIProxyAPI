@@ -405,6 +405,64 @@ func TestConfigSynthesizer_XAIKeys(t *testing.T) {
 	}
 }
 
+func TestConfigSynthesizer_CommandCodeKeys(t *testing.T) {
+	synth := NewConfigSynthesizer()
+	ctx := &SynthesisContext{
+		Config: &config.Config{
+			CommandCodeKey: []config.CommandCodeKey{{
+				APIKey:         "user_commandcode_key",
+				Prefix:         "cc",
+				BaseURL:        "https://api.commandcode.ai",
+				ProxyURL:       "http://proxy.local",
+				DisableCooling: true,
+				Headers:        map[string]string{"X-Custom": "value"},
+				Models:         []config.CodexModel{{Name: "deepseek-flash", Alias: "ds-flash"}},
+			}},
+		},
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+
+	auths, errSynthesize := synth.Synthesize(ctx)
+	if errSynthesize != nil {
+		t.Fatalf("Synthesize() error = %v", errSynthesize)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("auth count = %d, want 1", len(auths))
+	}
+	auth := auths[0]
+	if auth.Provider != "commandcode" {
+		t.Fatalf("provider = %q, want commandcode", auth.Provider)
+	}
+	if auth.Label != "commandcode-apikey" {
+		t.Fatalf("label = %q, want commandcode-apikey", auth.Label)
+	}
+	if auth.Attributes["api_key"] != "user_commandcode_key" {
+		t.Fatalf("api_key = %q, want user_commandcode_key", auth.Attributes["api_key"])
+	}
+	if auth.Attributes["base_url"] != "https://api.commandcode.ai" {
+		t.Fatalf("base_url = %q, want https://api.commandcode.ai", auth.Attributes["base_url"])
+	}
+	if auth.Attributes["header:X-Custom"] != "value" {
+		t.Fatalf("custom header = %q, want value", auth.Attributes["header:X-Custom"])
+	}
+	if auth.Attributes["models_hash"] == "" {
+		t.Fatal("models_hash is empty")
+	}
+	if auth.ProxyURL != "http://proxy.local" {
+		t.Fatalf("proxy URL = %q, want http://proxy.local", auth.ProxyURL)
+	}
+	if auth.Prefix != "cc" {
+		t.Fatalf("prefix = %q, want cc", auth.Prefix)
+	}
+	if disabled, ok := auth.Metadata["disable_cooling"].(bool); !ok || !disabled {
+		t.Fatalf("disable_cooling = %#v, want true", auth.Metadata["disable_cooling"])
+	}
+	if _, exists := auth.Attributes[coreauth.AttributeCodexAlphaSearch]; exists {
+		t.Fatal("commandcode auth unexpectedly contains codex_alpha_search")
+	}
+}
+
 func TestConfigSynthesizer_CodexKeys_SkipsEmptyAndHeaders(t *testing.T) {
 	synth := NewConfigSynthesizer()
 	ctx := &SynthesisContext{
@@ -795,6 +853,11 @@ func TestConfigSynthesizer_RejectsInvalidWeightsForAllAPIKeyTypes(t *testing.T) 
 			wantPath: "xai-api-key[0].weight",
 		},
 		{
+			name:     "commandcode",
+			cfg:      &config.Config{CommandCodeKey: []config.CommandCodeKey{{APIKey: "key", Weight: &invalidWeight}}},
+			wantPath: "commandcode-api-key[0].weight",
+		},
+		{
 			name: "openai compatibility",
 			cfg: &config.Config{OpenAICompatibility: []config.OpenAICompatibility{{
 				APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "key", Weight: &invalidWeight}},
@@ -873,15 +936,16 @@ func TestConfigSynthesizer_PropagatesWeightsForAllAPIKeyTypes(t *testing.T) {
 			ClaudeKey:       []config.ClaudeKey{{APIKey: "claude", Weight: weight(3)}},
 			CodexKey:        []config.CodexKey{{APIKey: "codex", Weight: weight(4)}},
 			XAIKey:          []config.XAIKey{{APIKey: "xai", Weight: weight(5)}},
+			CommandCodeKey:  []config.CommandCodeKey{{APIKey: "commandcode", Weight: weight(6)}},
 			OpenAICompatibility: []config.OpenAICompatibility{{
 				Name:    "compat",
 				BaseURL: "https://compat.example.com",
 				APIKeyEntries: []config.OpenAICompatibilityAPIKey{{
 					APIKey: "compat",
-					Weight: weight(6),
+					Weight: weight(7),
 				}},
 			}},
-			VertexCompatAPIKey: []config.VertexCompatKey{{APIKey: "vertex", Weight: weight(7)}},
+			VertexCompatAPIKey: []config.VertexCompatKey{{APIKey: "vertex", Weight: weight(8)}},
 		},
 		Now:         time.Now(),
 		IDGenerator: NewStableIDGenerator(),
@@ -891,8 +955,8 @@ func TestConfigSynthesizer_PropagatesWeightsForAllAPIKeyTypes(t *testing.T) {
 	if errSynthesize != nil {
 		t.Fatalf("Synthesize() error = %v", errSynthesize)
 	}
-	if len(auths) != 7 {
-		t.Fatalf("auth count = %d, want 7", len(auths))
+	if len(auths) != 8 {
+		t.Fatalf("auth count = %d, want 8", len(auths))
 	}
 	for index, auth := range auths {
 		wantWeight := strconv.Itoa(index + 1)
@@ -918,6 +982,9 @@ func TestConfigSynthesizer_AllProviders(t *testing.T) {
 			XAIKey: []config.XAIKey{
 				{APIKey: "xai-key"},
 			},
+			CommandCodeKey: []config.CommandCodeKey{
+				{APIKey: "commandcode-key"},
+			},
 			OpenAICompatibility: []config.OpenAICompatibility{
 				{Name: "compat", BaseURL: "https://compat.api"},
 			},
@@ -933,8 +1000,8 @@ func TestConfigSynthesizer_AllProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(auths) != 6 {
-		t.Fatalf("expected 6 auths, got %d", len(auths))
+	if len(auths) != 7 {
+		t.Fatalf("expected 7 auths, got %d", len(auths))
 	}
 
 	providers := make(map[string]bool)
@@ -942,7 +1009,7 @@ func TestConfigSynthesizer_AllProviders(t *testing.T) {
 		providers[a.Provider] = true
 	}
 
-	expected := []string{"gemini", "claude", "codex", "xai", "openai-compatible-compat", "vertex"}
+	expected := []string{"gemini", "claude", "codex", "xai", "commandcode", "openai-compatible-compat", "vertex"}
 	for _, p := range expected {
 		if !providers[p] {
 			t.Errorf("expected provider %s not found", p)
