@@ -22,6 +22,44 @@ func TestGetAvailableModelsReturnsClonedSnapshots(t *testing.T) {
 	}
 }
 
+func TestGetAvailableModelsSortsByIDAlphabetically(t *testing.T) {
+	r := newTestModelRegistry()
+	r.RegisterClient("client-1", "OpenAI", []*ModelInfo{
+		{ID: "zeta-model", OwnedBy: "team-a"},
+		{ID: "alpha-model", OwnedBy: "team-a"},
+		{ID: "middle-model", OwnedBy: "team-a"},
+	})
+
+	models := r.GetAvailableModels("openai")
+	if len(models) != 3 {
+		t.Fatalf("expected 3 models, got %d", len(models))
+	}
+	want := []string{"alpha-model", "middle-model", "zeta-model"}
+	for i, id := range want {
+		got, _ := models[i]["id"].(string)
+		if got != id {
+			t.Fatalf("models[%d] id = %q, want %q (full order: %v)", i, got, id, modelIDs(models))
+		}
+	}
+
+	cached := r.GetAvailableModels("openai")
+	for i, id := range want {
+		got, _ := cached[i]["id"].(string)
+		if got != id {
+			t.Fatalf("cached models[%d] id = %q, want %q", i, got, id)
+		}
+	}
+}
+
+func modelIDs(models []map[string]any) []string {
+	ids := make([]string, 0, len(models))
+	for _, model := range models {
+		id, _ := model["id"].(string)
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func TestGetAvailableModelsClaudeIncludesTokenLimits(t *testing.T) {
 	r := newTestModelRegistry()
 	r.RegisterClient("client-1", "Claude", []*ModelInfo{

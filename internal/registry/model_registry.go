@@ -881,6 +881,18 @@ func (r *ModelRegistry) buildAvailableModelsLocked(handlerType string, now time.
 		}
 	}
 
+	sort.SliceStable(models, func(i, j int) bool {
+		idI, _ := models[i]["id"].(string)
+		idJ, _ := models[j]["id"].(string)
+		if idI == "" {
+			idI, _ = models[i]["name"].(string)
+		}
+		if idJ == "" {
+			idJ, _ = models[j]["name"].(string)
+		}
+		return idI < idJ
+	})
+
 	return models, expiresAt
 }
 
