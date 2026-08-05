@@ -376,7 +376,9 @@ nonstream-keepalive-interval: 0
 
 # CommandCode providers (CLI key starts with user_... from ~/.commandcode/auth.json or commandcode.ai/studio)
 # Uses the native CommandCode executor (custom /alpha/generate + NDJSON stream).
-# v1: OpenAI-compatible clients (/v1/chat/completions) only.
+# Supports OpenAI Chat Completions, OpenAI Responses (HTTP + websocket), and Interactions.
+# Client formats other than chat are composed through the OpenAI chat hop into the
+# native /alpha/generate envelope (same fidelity limits as chat → CommandCode).
 # Multi-key shape (like openai-compatibility): one named block, many api-key-entries.
 # commandcode-api-key:
 #   - name: "primary"
