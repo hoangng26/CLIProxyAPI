@@ -6,6 +6,7 @@ import (
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/claude/openai/chat-completions"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/claude/openai/responses"
 
+	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/commandcode/interactions"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/commandcode/openai/chat-completions"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/commandcode/openai/responses"
 
