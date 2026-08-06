@@ -4,6 +4,7 @@ package chat_completions
 import (
 	"encoding/json"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,6 +75,9 @@ func convertMessages(messages gjson.Result) (raw []byte, system string) {
 
 	out := []byte("[]")
 	var systemParts []string
+	// OpenCode/AI SDK clients often omit tool message "name". CommandCode/AI SDK
+	// tool-result parts require toolName, so backfill from the matching tool_call.
+	toolNameByCallID := make(map[string]string)
 
 	messages.ForEach(func(_, m gjson.Result) bool {
 		role := m.Get("role").String()
@@ -87,8 +91,13 @@ func convertMessages(messages gjson.Result) (raw []byte, system string) {
 			value := flattenText(m.Get("content"))
 			block := []byte(`{}`)
 			block, _ = sjson.SetBytes(block, "type", "tool-result")
-			block, _ = sjson.SetBytes(block, "toolCallId", m.Get("tool_call_id").String())
-			block, _ = sjson.SetBytes(block, "toolName", m.Get("name").String())
+			toolCallID := firstNonEmpty(
+				strings.TrimSpace(m.Get("tool_call_id").String()),
+				strings.TrimSpace(m.Get("call_id").String()),
+			)
+			toolName := firstNonEmpty(strings.TrimSpace(m.Get("name").String()), toolNameByCallID[toolCallID])
+			block, _ = sjson.SetBytes(block, "toolCallId", toolCallID)
+			block, _ = sjson.SetBytes(block, "toolName", toolName)
 			block, _ = sjson.SetBytes(block, "output.type", "text")
 			block, _ = sjson.SetBytes(block, "output.value", value)
 			msg := []byte(`{"role":"tool","content":[]}`)
@@ -105,8 +114,17 @@ func convertMessages(messages gjson.Result) (raw []byte, system string) {
 				tcs.ForEach(func(_, tc gjson.Result) bool {
 					fn := tc.Get("function")
 					block := []byte(`{"type":"tool-call"}`)
-					block, _ = sjson.SetBytes(block, "toolCallId", tc.Get("id").String())
-					block, _ = sjson.SetBytes(block, "toolName", fn.Get("name").String())
+					toolCallID := firstNonEmpty(
+						strings.TrimSpace(tc.Get("id").String()),
+						strings.TrimSpace(tc.Get("tool_call_id").String()),
+						strings.TrimSpace(tc.Get("call_id").String()),
+					)
+					toolName := strings.TrimSpace(fn.Get("name").String())
+					if toolCallID != "" && toolName != "" {
+						toolNameByCallID[toolCallID] = toolName
+					}
+					block, _ = sjson.SetBytes(block, "toolCallId", toolCallID)
+					block, _ = sjson.SetBytes(block, "toolName", toolName)
 					block, _ = sjson.SetRawBytes(block, "input", safeParseJSON(fn.Get("arguments").String()))
 					content, _ = sjson.SetRawBytes(content, "-1", block)
 					return true
@@ -257,6 +275,15 @@ func safeParseJSON(s string) []byte {
 		return []byte(s)
 	}
 	return []byte("{}")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func joinNewline(parts []string) string {

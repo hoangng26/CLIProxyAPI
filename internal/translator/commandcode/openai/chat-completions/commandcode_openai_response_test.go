@@ -76,3 +76,19 @@ func TestConvertCommandCodeResponseToOpenAI_StreamToolCallsFinishReasonUpgraded(
 		t.Fatalf("expected finish_reason tool_calls, got: %s", joined)
 	}
 }
+
+func TestConvertCommandCodeResponseToOpenAI_ToolCallSynthesizesEmptyID(t *testing.T) {
+	var param any
+	ctx := context.Background()
+	chunks := ConvertCommandCodeResponseToOpenAI(ctx, "m", nil, nil, []byte(`{"type":"tool-call","toolName":"ping","input":{"x":1}}`), &param)
+	if len(chunks) == 0 {
+		t.Fatal("expected tool-call chunk")
+	}
+	id := gjson.GetBytes(chunks[0], "choices.0.delta.tool_calls.0.id").String()
+	if id == "" || !strings.HasPrefix(id, "call_") {
+		t.Fatalf("synthesized id=%q want call_* prefix, chunk=%s", id, chunks[0])
+	}
+	if gjson.GetBytes(chunks[0], "choices.0.delta.tool_calls.0.function.name").String() != "ping" {
+		t.Fatalf("name missing: %s", chunks[0])
+	}
+}

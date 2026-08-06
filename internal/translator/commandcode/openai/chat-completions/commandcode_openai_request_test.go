@@ -74,7 +74,49 @@ func TestConvertOpenAIRequestToCommandCode_ToolCallsAndResults(t *testing.T) {
 	if tool.Get("content.0.output.value").String() != "pong" {
 		t.Fatal("tool output")
 	}
+	if tool.Get("content.0.toolName").String() != "ping" {
+		t.Fatalf("toolName=%q", tool.Get("content.0.toolName").String())
+	}
 	if gjson.GetBytes(out, "params.stream").Bool() {
 		t.Fatal("stream want false")
+	}
+}
+
+func TestConvertOpenAIRequestToCommandCode_BackfillsToolNameAndCallID(t *testing.T) {
+	// OpenCode/AI SDK style: tool messages often omit "name" and may only send call_id.
+	in := []byte(`{
+	  "messages":[
+	    {"role":"assistant","content":null,"tool_calls":[
+	      {"id":"c1","type":"function","function":{"name":"ping","arguments":"{}"}},
+	      {"id":"c2","type":"function","function":{"name":"pong","arguments":"{\"y\":2}"}}
+	    ]},
+	    {"role":"tool","tool_call_id":"c1","content":"one"},
+	    {"role":"tool","call_id":"c2","content":"two"}
+	  ]
+	}`)
+	out := ConvertOpenAIRequestToCommandCode("m", in, false)
+	msgs := gjson.GetBytes(out, "params.messages").Array()
+	if len(msgs) != 3 {
+		t.Fatalf("messages=%s", gjson.GetBytes(out, "params.messages").Raw)
+	}
+
+	if got := msgs[1].Get("content.0.toolCallId").String(); got != "c1" {
+		t.Fatalf("tool1 toolCallId=%q", got)
+	}
+	if got := msgs[1].Get("content.0.toolName").String(); got != "ping" {
+		t.Fatalf("tool1 toolName=%q want ping (backfilled)", got)
+	}
+	if got := msgs[1].Get("content.0.output.value").String(); got != "one" {
+		t.Fatalf("tool1 output=%q", got)
+	}
+
+	if got := msgs[2].Get("content.0.toolCallId").String(); got != "c2" {
+		t.Fatalf("tool2 toolCallId=%q want c2 from call_id fallback", got)
+	}
+	if got := msgs[2].Get("content.0.toolName").String(); got != "pong" {
+		t.Fatalf("tool2 toolName=%q want pong (backfilled)", got)
+	}
+	if got := msgs[2].Get("content.0.output.value").String(); got != "two" {
+		t.Fatalf("tool2 output=%q", got)
 	}
 }

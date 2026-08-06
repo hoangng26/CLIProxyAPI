@@ -234,6 +234,9 @@ func ConvertCommandCodeResponseToOpenAI(_ context.Context, modelName string, _, 
 		if id == "" {
 			id = root.Get("id").String()
 		}
+		if id == "" {
+			id = fmt.Sprintf("call_%d", state.ToolIndex)
+		}
 		if _, seen := state.ToolIndexByID[id]; seen {
 			// Already streamed via tool-input-*; skip consolidated event.
 			return nil
