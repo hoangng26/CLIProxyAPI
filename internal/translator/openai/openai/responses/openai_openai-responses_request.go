@@ -148,7 +148,20 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 			if itemType == "" && item.Get("role").String() != "" {
 				itemType = "message"
 			}
-			if itemType != "function_call" && itemType != "custom_tool_call" {
+			// Flush buffered tool calls when the Responses stream leaves a
+			// consecutive function_call group. Assistant text is a special case:
+			// Codex often interleaves assistant messages among function_call
+			// items that still belong to the same turn (outputs arrive later).
+			// Flushing there splits one turn into multiple assistant(tool_calls)
+			// messages and breaks providers that require every tool_call_id to
+			// be answered immediately after the assistant tool_calls message.
+			shouldFlushPendingToolCalls := itemType != "function_call" && itemType != "custom_tool_call"
+			if shouldFlushPendingToolCalls && (itemType == "message" || itemType == "") {
+				if item.Get("role").String() == "assistant" && len(pendingToolCalls) > 0 {
+					shouldFlushPendingToolCalls = false
+				}
+			}
+			if shouldFlushPendingToolCalls {
 				flushPendingToolCalls()
 			}
 
