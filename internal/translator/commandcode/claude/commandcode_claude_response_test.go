@@ -95,3 +95,23 @@ func TestConvertCommandCodeResponseToClaude_SkipsBadLine(t *testing.T) {
 		t.Fatalf("bad line must skip, got %q", got)
 	}
 }
+
+func TestConvertCommandCodeResponseToClaudeNonStream_TextAndUsage(t *testing.T) {
+	body := []byte("{\"type\":\"text-delta\",\"text\":\"Hi\"}\n{\"type\":\"finish\",\"finishReason\":\"stop\",\"totalUsage\":{\"promptTokens\":3,\"completionTokens\":2}}\n")
+	out := ConvertCommandCodeResponseToClaudeNonStream(context.Background(), "m", nil, nil, body, nil)
+	if gjson.GetBytes(out, "type").String() != "message" {
+		t.Fatalf("type=%s out=%s", gjson.GetBytes(out, "type").String(), out)
+	}
+	if gjson.GetBytes(out, "role").String() != "assistant" {
+		t.Fatal("role")
+	}
+	if gjson.GetBytes(out, "content.0.type").String() != "text" || gjson.GetBytes(out, "content.0.text").String() != "Hi" {
+		t.Fatalf("content=%s", gjson.GetBytes(out, "content").Raw)
+	}
+	if gjson.GetBytes(out, "stop_reason").String() != "end_turn" {
+		t.Fatalf("stop_reason=%s", gjson.GetBytes(out, "stop_reason").Raw)
+	}
+	if gjson.GetBytes(out, "usage.input_tokens").Int() != 3 || gjson.GetBytes(out, "usage.output_tokens").Int() != 2 {
+		t.Fatalf("usage=%s", gjson.GetBytes(out, "usage").Raw)
+	}
+}

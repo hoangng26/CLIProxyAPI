@@ -353,3 +353,136 @@ func ConvertCommandCodeResponseToClaude(_ context.Context, modelName string, _, 
 
 	return out
 }
+
+// ConvertCommandCodeResponseToClaudeNonStream folds a full CommandCode NDJSON
+// body into one Claude message object.
+func ConvertCommandCodeResponseToClaudeNonStream(ctx context.Context, modelName string, originalRequestRawJSON, requestRawJSON, rawJSON []byte, _ *any) []byte {
+	var param any
+	var thinking, text strings.Builder
+	type toolAcc struct {
+		ID, Name, InputJSON string
+	}
+	var tools []*toolAcc
+	toolsByID := map[string]*toolAcc{}
+
+	for _, line := range bytes.Split(rawJSON, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		if bytes.HasPrefix(line, []byte("data:")) {
+			line = bytes.TrimSpace(line[5:])
+		}
+		if len(line) == 0 {
+			continue
+		}
+
+		nextIdx := 0
+		if st, ok := param.(*claudeStreamState); ok && st != nil {
+			nextIdx = st.NextIndex
+		}
+
+		_ = ConvertCommandCodeResponseToClaude(ctx, modelName, originalRequestRawJSON, requestRawJSON, line, &param)
+
+		root := gjson.ParseBytes(line)
+		if !root.IsObject() {
+			continue
+		}
+		switch root.Get("type").String() {
+		case "reasoning-delta":
+			thinking.WriteString(firstNonEmpty(root.Get("text").String(), root.Get("delta").String()))
+		case "text-delta":
+			text.WriteString(firstNonEmpty(root.Get("text").String(), root.Get("delta").String()))
+		case "tool-input-start":
+			id := toolCallID(root)
+			if id == "" {
+				id = fmt.Sprintf("call_%d", nextIdx)
+			}
+			if _, seen := toolsByID[id]; seen {
+				continue
+			}
+			acc := &toolAcc{
+				ID:   id,
+				Name: firstNonEmpty(root.Get("toolName").String(), root.Get("name").String()),
+			}
+			toolsByID[id] = acc
+			tools = append(tools, acc)
+		case "tool-input-delta":
+			id := toolCallID(root)
+			acc, ok := toolsByID[id]
+			if !ok {
+				continue
+			}
+			acc.InputJSON += firstNonEmpty(root.Get("delta").String(), root.Get("inputTextDelta").String())
+		case "tool-call":
+			id := firstNonEmpty(root.Get("toolCallId").String(), root.Get("id").String())
+			if id == "" {
+				id = fmt.Sprintf("call_%d", nextIdx)
+			}
+			if _, seen := toolsByID[id]; seen {
+				continue
+			}
+			acc := &toolAcc{
+				ID:        id,
+				Name:      firstNonEmpty(root.Get("toolName").String(), root.Get("name").String()),
+				InputJSON: toolCallInputJSON(root),
+			}
+			toolsByID[id] = acc
+			tools = append(tools, acc)
+		case "error":
+			text.WriteString("\n\n[CommandCode error: " + commandCodeErrorMessage(root) + "]")
+		}
+	}
+
+	out := []byte(`{"id":"","type":"message","role":"assistant","model":"","content":[],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0}}`)
+	id := ""
+	model := modelName
+	stop := "end_turn"
+	var inTok, outTok int64
+	if st, ok := param.(*claudeStreamState); ok && st != nil {
+		id = st.MessageID
+		model = st.Model
+		if st.PendingStopReason != "" {
+			stop = st.PendingStopReason
+		}
+		inTok = st.InputTokens
+		outTok = st.OutputTokens
+	}
+	if id == "" {
+		id = fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	}
+	if model == "" {
+		model = "commandcode"
+	}
+	out, _ = sjson.SetBytes(out, "id", id)
+	out, _ = sjson.SetBytes(out, "model", model)
+	out, _ = sjson.SetBytes(out, "stop_reason", stop)
+	out, _ = sjson.SetBytes(out, "usage.input_tokens", inTok)
+	out, _ = sjson.SetBytes(out, "usage.output_tokens", outTok)
+
+	if thinking.Len() > 0 {
+		block := []byte(`{"type":"thinking","thinking":""}`)
+		block, _ = sjson.SetBytes(block, "thinking", thinking.String())
+		out, _ = sjson.SetRawBytes(out, "content.-1", block)
+	}
+	if text.Len() > 0 {
+		block := []byte(`{"type":"text","text":""}`)
+		block, _ = sjson.SetBytes(block, "text", text.String())
+		out, _ = sjson.SetRawBytes(out, "content.-1", block)
+	}
+	for _, acc := range tools {
+		block := []byte(`{"type":"tool_use","id":"","name":"","input":{}}`)
+		block, _ = sjson.SetBytes(block, "id", acc.ID)
+		block, _ = sjson.SetBytes(block, "name", acc.Name)
+		input := []byte("{}")
+		if acc.InputJSON != "" && gjson.Valid(acc.InputJSON) {
+			parsed := gjson.Parse(acc.InputJSON)
+			if parsed.IsObject() {
+				input = []byte(parsed.Raw)
+			}
+		}
+		block, _ = sjson.SetRawBytes(block, "input", input)
+		out, _ = sjson.SetRawBytes(out, "content.-1", block)
+	}
+	return out
+}
