@@ -106,14 +106,11 @@ func convertClaudeMessages(messages gjson.Result) []byte {
 			emittedFromUserOrAssistant = true
 		case "user":
 			sawUserOrAssistant = true
-			userMsgs, toolMsgs := convertUserContent(m.Get("content"), toolNameByCallID)
-			if len(userMsgs) == 0 && len(toolMsgs) == 0 {
+			userOut := convertUserContent(m.Get("content"), toolNameByCallID)
+			if len(userOut) == 0 {
 				return true
 			}
-			for _, msg := range userMsgs {
-				out, _ = sjson.SetRawBytes(out, "-1", msg)
-			}
-			for _, msg := range toolMsgs {
+			for _, msg := range userOut {
 				out, _ = sjson.SetRawBytes(out, "-1", msg)
 			}
 			emittedFromUserOrAssistant = true
@@ -188,26 +185,43 @@ func convertAssistantContent(content gjson.Result) (raw []byte, toolNames map[st
 	return out, toolNames
 }
 
-func convertUserContent(content gjson.Result, toolNameByCallID map[string]string) (userMsgs, toolMsgs [][]byte) {
+func convertUserContent(content gjson.Result, toolNameByCallID map[string]string) [][]byte {
 	if !content.Exists() || content.Type == gjson.Null {
-		return nil, nil
+		return nil
 	}
 
 	if content.Type == gjson.String {
-		return [][]byte{newUserTextMessage(content.String())}, nil
+		return [][]byte{newUserTextMessage(content.String())}
 	}
 	if !content.IsArray() {
-		return nil, nil
+		return nil
 	}
 
+	var msgs [][]byte
 	textBlocks := []byte("[]")
 	textCount := 0
+
+	flushText := func() {
+		if textCount == 0 {
+			return
+		}
+		msg := []byte(`{"role":"user"}`)
+		msg, _ = sjson.SetRawBytes(msg, "content", textBlocks)
+		msgs = append(msgs, msg)
+		textBlocks = []byte("[]")
+		textCount = 0
+	}
+
+	appendText := func(text string) {
+		b := []byte(`{"type":"text"}`)
+		b, _ = sjson.SetBytes(b, "text", text)
+		textBlocks, _ = sjson.SetRawBytes(textBlocks, "-1", b)
+		textCount++
+	}
+
 	content.ForEach(func(_, part gjson.Result) bool {
 		if part.Type == gjson.String {
-			b := []byte(`{"type":"text"}`)
-			b, _ = sjson.SetBytes(b, "text", part.String())
-			textBlocks, _ = sjson.SetRawBytes(textBlocks, "-1", b)
-			textCount++
+			appendText(part.String())
 			return true
 		}
 		if shouldDropClaudePart(part) {
@@ -215,22 +229,15 @@ func convertUserContent(content gjson.Result, toolNameByCallID map[string]string
 		}
 		switch part.Get("type").String() {
 		case "text":
-			b := []byte(`{"type":"text"}`)
-			b, _ = sjson.SetBytes(b, "text", part.Get("text").String())
-			textBlocks, _ = sjson.SetRawBytes(textBlocks, "-1", b)
-			textCount++
+			appendText(part.Get("text").String())
 		case "tool_result":
-			toolMsgs = append(toolMsgs, newToolResultMessage(part, toolNameByCallID))
+			flushText()
+			msgs = append(msgs, newToolResultMessage(part, toolNameByCallID))
 		}
 		return true
 	})
-
-	if textCount > 0 {
-		msg := []byte(`{"role":"user"}`)
-		msg, _ = sjson.SetRawBytes(msg, "content", textBlocks)
-		userMsgs = append(userMsgs, msg)
-	}
-	return userMsgs, toolMsgs
+	flushText()
+	return msgs
 }
 
 func newUserTextMessage(text string) []byte {

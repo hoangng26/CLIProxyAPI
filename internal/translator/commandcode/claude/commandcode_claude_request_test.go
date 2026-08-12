@@ -129,3 +129,30 @@ func TestConvertClaudeRequestToCommandCode_AllPartsDroppedEmitsEmptyUser(t *test
 		t.Fatalf("want one empty user, got %s", gjson.GetBytes(out, "params.messages").Raw)
 	}
 }
+
+func TestConvertClaudeRequestToCommandCode_MixedUserPreservesBlockOrder(t *testing.T) {
+	in := []byte(`{
+	  "messages":[
+	    {"role":"assistant","content":[{"type":"tool_use","id":"c1","name":"ping","input":{}}]},
+	    {"role":"user","content":[
+	      {"type":"tool_result","tool_use_id":"c1","content":"pong"},
+	      {"type":"text","text":"continue"}
+	    ]}
+	  ]
+	}`)
+	out := ConvertClaudeRequestToCommandCode("m", in, false)
+	assertZodEnvelope(t, out)
+	msgs := gjson.GetBytes(out, "params.messages").Array()
+	if len(msgs) != 3 {
+		t.Fatalf("messages=%s", gjson.GetBytes(out, "params.messages").Raw)
+	}
+	if msgs[1].Get("role").String() != "tool" {
+		t.Fatalf("want tool then user, got messages=%s", gjson.GetBytes(out, "params.messages").Raw)
+	}
+	if msgs[1].Get("content.0.output.value").String() != "pong" {
+		t.Fatalf("tool output=%s", msgs[1].Raw)
+	}
+	if msgs[2].Get("role").String() != "user" || msgs[2].Get("content.0.text").String() != "continue" {
+		t.Fatalf("want leftover text after tool, got messages=%s", gjson.GetBytes(out, "params.messages").Raw)
+	}
+}
