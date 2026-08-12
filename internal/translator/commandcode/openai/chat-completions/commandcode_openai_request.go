@@ -15,15 +15,11 @@ import (
 const defaultMaxTokens = 32000
 const defaultTemperature = 0.3
 
-// ConvertOpenAIRequestToCommandCode transforms an OpenAI chat-completions body into a
-// CommandCode /alpha/generate envelope.
-func ConvertOpenAIRequestToCommandCode(modelName string, rawJSON []byte, stream bool) []byte {
-	root := gjson.ParseBytes(rawJSON)
-
+// BuildCommandCodeEnvelope returns the /alpha/generate skeleton.
+func BuildCommandCodeEnvelope(modelName string, stream bool) []byte {
 	out := []byte(`{"threadId":"","memory":"","config":{},"params":{}}`)
 	out, _ = sjson.SetBytes(out, "threadId", uuid.NewString())
 	out, _ = sjson.SetBytes(out, "memory", "")
-
 	out, _ = sjson.SetBytes(out, "config.workingDir", "")
 	out, _ = sjson.SetBytes(out, "config.date", time.Now().UTC().Format("2006-01-02"))
 	out, _ = sjson.SetBytes(out, "config.environment", runtime.GOOS)
@@ -33,9 +29,22 @@ func ConvertOpenAIRequestToCommandCode(modelName string, rawJSON []byte, stream 
 	out, _ = sjson.SetBytes(out, "config.mainBranch", "")
 	out, _ = sjson.SetBytes(out, "config.gitStatus", "")
 	out, _ = sjson.SetRawBytes(out, "config.recentCommits", []byte("[]"))
-
 	out, _ = sjson.SetBytes(out, "params.model", modelName)
 	out, _ = sjson.SetBytes(out, "params.stream", stream)
+	return out
+}
+
+// ConvertTools maps OpenAI or Anthropic tool lists to CommandCode params.tools.
+func ConvertTools(tools gjson.Result) []byte {
+	return convertTools(tools)
+}
+
+// ConvertOpenAIRequestToCommandCode transforms an OpenAI chat-completions body into a
+// CommandCode /alpha/generate envelope.
+func ConvertOpenAIRequestToCommandCode(modelName string, rawJSON []byte, stream bool) []byte {
+	root := gjson.ParseBytes(rawJSON)
+
+	out := BuildCommandCodeEnvelope(modelName, stream)
 
 	maxTokens := int64(defaultMaxTokens)
 	if v := root.Get("max_tokens"); v.Exists() {
@@ -61,7 +70,7 @@ func ConvertOpenAIRequestToCommandCode(modelName string, rawJSON []byte, stream 
 		out, _ = sjson.SetBytes(out, "params.system", system)
 	}
 
-	if tools := convertTools(root.Get("tools")); len(tools) > 0 {
+	if tools := ConvertTools(root.Get("tools")); len(tools) > 0 {
 		out, _ = sjson.SetRawBytes(out, "params.tools", tools)
 	}
 

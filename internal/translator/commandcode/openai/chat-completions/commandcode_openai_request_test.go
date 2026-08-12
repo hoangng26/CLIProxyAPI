@@ -120,3 +120,25 @@ func TestConvertOpenAIRequestToCommandCode_BackfillsToolNameAndCallID(t *testing
 		t.Fatalf("tool2 output=%q", got)
 	}
 }
+
+func TestBuildCommandCodeEnvelope_ZodShape(t *testing.T) {
+	out := BuildCommandCodeEnvelope("deepseek/deepseek-v4-pro", true)
+	if gjson.GetBytes(out, "memory").Type != gjson.String {
+		t.Fatalf("memory type=%s raw=%s", gjson.GetBytes(out, "memory").Type, out)
+	}
+	if !gjson.GetBytes(out, "config").IsObject() {
+		t.Fatalf("config must be object: %s", out)
+	}
+	if gjson.GetBytes(out, "params.model").String() != "deepseek/deepseek-v4-pro" {
+		t.Fatalf("params.model=%s", gjson.GetBytes(out, "params.model").Raw)
+	}
+	if !gjson.GetBytes(out, "params.stream").Bool() {
+		t.Fatal("params.stream want true")
+	}
+	if gjson.GetBytes(out, "threadId").String() == "" {
+		t.Fatal("threadId required")
+	}
+	if gjson.GetBytes(out, "params.messages").Exists() {
+		t.Fatal("envelope must not set params.messages")
+	}
+}
