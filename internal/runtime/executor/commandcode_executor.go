@@ -150,12 +150,34 @@ func (e *CommandCodeExecutor) ExecuteStream(ctx context.Context, auth *cliproxya
 		scanner := bufio.NewScanner(httpResp.Body)
 		scanner.Buffer(nil, 1_048_576)
 		var param any
+		// Terminal events ("finish" and "error") cause the responseFormat converter
+		// to emit its own final chunk. If none is seen before the body ends, we
+		// inject a synthetic finish so the client still gets a terminal chunk.
+		sawTerminalEvent := false
+		detectTerminalEvent := func(line []byte) bool {
+			line = bytes.TrimSpace(line)
+			if len(line) == 0 {
+				return false
+			}
+			if bytes.HasPrefix(line, []byte("data:")) {
+				line = bytes.TrimSpace(line[5:])
+			}
+			switch gjson.GetBytes(line, "type").String() {
+			case "finish", "error":
+				return true
+			default:
+				return false
+			}
+		}
 		for scanner.Scan() {
 			line := bytes.TrimSpace(scanner.Bytes())
 			if len(line) == 0 {
 				continue
 			}
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
+			if detectTerminalEvent(line) {
+				sawTerminalEvent = true
+			}
 			if u := parseCommandCodeUsageLine(line); u.TotalTokens > 0 || u.InputTokens > 0 || u.OutputTokens > 0 {
 				reporter.Publish(ctx, u)
 			}
@@ -174,6 +196,22 @@ func (e *CommandCodeExecutor) ExecuteStream(ctx context.Context, auth *cliproxya
 			select {
 			case out <- cliproxyexecutor.StreamChunk{Err: errScan}:
 			case <-ctx.Done():
+			}
+			return
+		}
+		if !sawTerminalEvent {
+			// Upstream ended without a terminal event (e.g. a mid-response abort or
+			// max-token cutoff). Emit a synthetic finish so the client still sees a
+			// completed stream instead of a truncated one. The responseFormat
+			// converter finalizes its own terminal state from this synthetic finish.
+			helps.RecordAPIResponseError(ctx, e.cfg, newCommandCodeIncompleteStreamError())
+			chunks := sdktranslator.TranslateStream(ctx, to, responseFormat, req.Model, opts.OriginalRequest, translated, []byte(`{"type":"finish","finishReason":"stop"}`), &param)
+			for i := range chunks {
+				select {
+				case out <- cliproxyexecutor.StreamChunk{Payload: chunks[i]}:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()
@@ -354,4 +392,19 @@ func firstCommandCodeInt(node gjson.Result, keys ...string) int64 {
 		}
 	}
 	return 0
+}
+
+const commandCodeIncompleteStreamMessage = "stream error: stream disconnected before completion: CommandCode stream closed before the finish event"
+
+// commandCodeIncompleteStreamError marks a CommandCode NDJSON stream that ended
+// before the terminal "finish" event was received.
+type commandCodeIncompleteStreamError struct {
+	statusErr
+}
+
+func newCommandCodeIncompleteStreamError() commandCodeIncompleteStreamError {
+	return commandCodeIncompleteStreamError{statusErr: statusErr{
+		code: http.StatusRequestTimeout,
+		msg:  commandCodeIncompleteStreamMessage,
+	}}
 }

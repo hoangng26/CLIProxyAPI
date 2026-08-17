@@ -161,6 +161,52 @@ func TestCommandCodeExecutor_StatusErr(t *testing.T) {
 	assertStatusErr(t, err, http.StatusUnauthorized)
 }
 
+// TestCommandCodeExecutor_StreamEndsWithoutFinishEvent verifies that when the
+// upstream NDJSON body ends without the terminal "finish" event (e.g. a
+// max-tokens cutoff or an aborted response), the executor injects a synthetic
+// finish so the client still receives a terminal finish_reason chunk instead of
+// seeing the session as interrupted/truncated.
+func TestCommandCodeExecutor_StreamEndsWithoutFinishEvent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"type":"text-delta","text":"partial answer"}` + "\n"))
+		// NOTE: no {"type":"finish"} event; the body just ends.
+	}))
+	defer srv.Close()
+
+	exec := NewCommandCodeExecutor(&config.Config{})
+	auth := &cliproxyauth.Auth{
+		Provider: "commandcode",
+		Attributes: map[string]string{
+			"api_key":  "k",
+			"base_url": srv.URL,
+		},
+	}
+	payload := []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)
+	result, err := exec.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{
+		Model: "m", Payload: payload,
+	}, cliproxyexecutor.Options{
+		Stream: true, SourceFormat: sdktranslator.FormatOpenAI, OriginalRequest: payload,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStream error = %v", err)
+	}
+	var chunks []string
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			t.Fatalf("unexpected stream error: %v", chunk.Err)
+		}
+		chunks = append(chunks, string(chunk.Payload))
+	}
+	if len(chunks) < 2 {
+		t.Fatalf("expected content + terminal chunk, got %d chunks: %v", len(chunks), chunks)
+	}
+	last := chunks[len(chunks)-1]
+	if fr := gjson.GetBytes([]byte(last), "choices.0.finish_reason").String(); fr != "stop" {
+		t.Fatalf("last chunk missing finish_reason=stop, got %q: %s", fr, last)
+	}
+}
+
 func TestCommandCodeExecutor_StreamTrueAfterPayloadOverride(t *testing.T) {
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
