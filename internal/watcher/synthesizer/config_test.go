@@ -10,6 +10,10 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func TestNewConfigSynthesizer(t *testing.T) {
 	synth := NewConfigSynthesizer()
 	if synth == nil {
@@ -81,7 +85,7 @@ func TestConfigSynthesizer_GeminiKeys(t *testing.T) {
 		{
 			name: "gemini key disable cooling",
 			geminiKeys: []config.GeminiKey{
-				{APIKey: "test-key-123", Prefix: "team-a", DisableCooling: true},
+				{APIKey: "test-key-123", Prefix: "team-a", DisableCooling: boolPtr(true)},
 			},
 			wantLen: 1,
 			validate: func(t *testing.T, auths []*coreauth.Auth) {
@@ -227,7 +231,7 @@ func TestConfigSynthesizer_ClaudeKeys(t *testing.T) {
 					APIKey:                  "sk-ant-api-xxx",
 					Prefix:                  "main",
 					BaseURL:                 "https://api.anthropic.com",
-					DisableCooling:          true,
+					DisableCooling:          boolPtr(true),
 					RebuildMidSystemMessage: true,
 					Models: []config.ClaudeModel{
 						{Name: "claude-3-opus"},
@@ -312,7 +316,7 @@ func TestConfigSynthesizer_CodexKeys(t *testing.T) {
 					ProxyURL:       "http://proxy.local",
 					Websockets:     true,
 					AlphaSearch:    true,
-					DisableCooling: true,
+					DisableCooling: boolPtr(true),
 				},
 			},
 		},
@@ -359,7 +363,7 @@ func TestConfigSynthesizer_XAIKeys(t *testing.T) {
 				ProxyURL:       "http://proxy.local",
 				Websockets:     true,
 				AlphaSearch:    true,
-				DisableCooling: true,
+				DisableCooling: boolPtr(true),
 				Headers:        map[string]string{"X-Custom": "value"},
 				Models:         []config.XAIModel{{Name: "grok-4.5", Alias: "grok-latest"}},
 			}},
@@ -402,6 +406,47 @@ func TestConfigSynthesizer_XAIKeys(t *testing.T) {
 	}
 	if disabled, ok := auth.Metadata["disable_cooling"].(bool); !ok || !disabled {
 		t.Fatalf("disable_cooling = %#v, want true", auth.Metadata["disable_cooling"])
+	}
+}
+
+func TestConfigSynthesizer_XAIKeys_AllowsEmptyAPIKeyWithBaseURL(t *testing.T) {
+	synth := NewConfigSynthesizer()
+	ctx := &SynthesisContext{
+		Config: &config.Config{
+			XAIKey: []config.CodexKey{
+				{
+					APIKey:  "",
+					BaseURL: "https://custom-xai.example.com",
+					Headers: map[string]string{"Custom-Auth": "secret"},
+				},
+				{
+					APIKey:  "   ",
+					BaseURL: "https://custom-xai-2.example.com",
+				},
+			},
+		},
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+
+	auths, err := synth.Synthesize(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(auths) != 2 {
+		t.Fatalf("expected 2 auths for empty API keys with base URL, got %d", len(auths))
+	}
+	if auths[0].Attributes["base_url"] != "https://custom-xai.example.com" {
+		t.Fatalf("expected base_url=https://custom-xai.example.com, got %s", auths[0].Attributes["base_url"])
+	}
+	if auths[0].Attributes["header:Custom-Auth"] != "secret" {
+		t.Fatalf("expected header:Custom-Auth=secret, got %s", auths[0].Attributes["header:Custom-Auth"])
+	}
+	if auths[0].Attributes["auth_kind"] != "apikey" {
+		t.Fatalf("expected auth_kind=apikey, got %s", auths[0].Attributes["auth_kind"])
+	}
+	if _, exists := auths[0].Attributes["api_key"]; exists {
+		t.Fatalf("expected no api_key attribute for empty key, got %s", auths[0].Attributes["api_key"])
 	}
 }
 
@@ -510,7 +555,7 @@ func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 				{
 					Name:           "CustomProvider",
 					BaseURL:        "https://custom.api.com",
-					DisableCooling: true,
+					DisableCooling: boolPtr(true),
 					APIKeyEntries: []config.OpenAICompatibilityAPIKey{
 						{APIKey: "key-1"},
 						{APIKey: "key-2"},
