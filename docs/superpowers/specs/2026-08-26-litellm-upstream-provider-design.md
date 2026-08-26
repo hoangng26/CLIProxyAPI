@@ -35,48 +35,39 @@ Excluded:
 
 ## Configuration
 
-Introduce a top-level `litellm:` configuration block. Its shape follows existing API-key-backed provider blocks:
+Introduce a top-level `litellm:` configuration block containing one or more named LiteLLM Proxy instances. Its shape follows existing named API-key-backed provider blocks:
 
 ```yaml
 litellm:
-  disabled: false
-  priority: 0
-  base-url: http://localhost:4000
-  headers:
-    X-Deployment: production
-  request-retry: 2
-  request-scoped-errors:
-    - 400
-    - 404
-  api-key-entries:
-    - api-key: ${LITELLM_API_KEY}
-      weight: 1
-      proxy-url: socks5://proxy.example:1080
-  models:
-    - name: openai/gpt-5
-      alias: gpt-5-via-litellm
-      display-name: GPT-5 through LiteLLM
-      max-context-length: 400000
-      input-modalities: [text, image]
-      output-modalities: [text]
-      thinking:
-        levels: [low, medium, high]
+  - name: production
+    disabled: false
+    priority: 0
+    base-url: http://localhost:4000
+    headers:
+      X-Deployment: production
+    request-retry: 2
+    request-scoped-errors:
+      - status: 400
+        match: [invalid_request_error]
+        action: stop
+    api-key-entries:
+      - api-key: ${LITELLM_API_KEY}
+        weight: 1
+        proxy-url: socks5://proxy.example:1080
+    models:
+      - name: openai/gpt-5
+        alias: gpt-5-via-litellm
+        display-name: GPT-5 through LiteLLM
+        max-context-length: 400000
+        input-modalities: [text, image]
+        output-modalities: [text]
+        thinking:
+          levels: [low, medium, high]
 ```
 
-`base-url` is LiteLLM Proxy root. It must contain a scheme and host and must not include a terminal `/v1` path segment. Executor constructs endpoint paths itself. This prevents accidental `/v1/v1/...` requests.
+`base-url` is LiteLLM Proxy root. It must contain an HTTP(S) scheme and host and must not include a terminal `/v1` path segment. Executor constructs endpoint paths itself. This prevents accidental `/v1/v1/...` requests. API-key entries inherit shared base URL and headers; each entry may override outbound proxy URL. An enabled named block must contain at least one API-key entry, while disabled blocks may be retained without credentials.
 
-Each model is static. `name` is upstream LiteLLM model identifier. `alias` is public CLIProxyAPI model name. Config validation requires non-empty names and aliases, validates URL shape, and uses existing API-key weight rules. Provider options with existing semantic equivalents use same behavior: disabled state, priority, retry, request-scoped errors, cooling controls, custom headers, model capabilities, mapping, and thinking metadata.
-
-## Architecture
-
-### Configuration and auth lifecycle
-
-1. Parser reads `litellm` into a dedicated config type.
-2. Normalization validates and canonicalizes LiteLLM configuration.
-3. Config synthesizer creates one in-memory auth record per API-key entry. Attributes include base URL, API key, custom headers, model config index, and provider key.
-4. Existing auth scheduler selects these credentials by weight, cooling state, and priority.
-5. Service registration binds LiteLLM auth records to `LiteLLMExecutor`.
-6. Static aliases register under provider key `litellm`, making them eligible for normal model routing and `/v1/models` output.
+Each model is static. `name` is upstream LiteLLM model identifier. `alias` is public CLIProxyAPI model name; when omitted, `name` is used. Config validation rejects duplicate provider names and duplicate aliases within a provider, validates URL shape, and uses existing API-key weight rules. Provider options with existing semantic equivalents use same behavior: disabled state, priority, retry, request-scoped errors, cooling controls, custom headers, model capabilities, mapping, and thinking metadata.
 
 No credentials are written to provider-specific token files. Secrets remain in config-backed auth records and existing secret-resolution paths.
 
