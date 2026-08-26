@@ -24,11 +24,11 @@ Included:
 - Native forwarding for Chat Completions, Responses, and Messages in streaming and non-streaming modes.
 - API-key pooling through existing weighted round-robin scheduling.
 - Existing payload configuration and thinking pipeline at the provider boundary.
-- Management API configuration CRUD, documentation, unit tests, and a route-level integration test.
+- Management API configuration CRUD, documentation, unit tests, a route-level integration test, and Management Center UI support.
 
 Excluded:
 
-- Remote model discovery via `GET /v1/models`.
+- Remote model discovery by backend via `GET /v1/models`. The Management Center may use its existing client-side discovery workflow to populate static aliases after explicit user selection.
 - LiteLLM-specific fallback, budget, cache, guardrail, or administration APIs.
 - Image, audio, embeddings, batch, realtime, assistants, or Anthropic Completion endpoints.
 - Generic changes to `openai-compatibility`; LiteLLM remains isolated from existing compatibility-provider behavior.
@@ -110,9 +110,13 @@ The executor preserves native body shapes. It must not force Chat Completions `s
 - Request/response metadata uses existing upstream audit log helpers; secret-bearing headers remain redacted by existing logging policy.
 - Usage accounting parses native OpenAI Chat, OpenAI Responses, and Anthropic Messages usage formats. If no usage exists, existing reporter records request without inventing token counts.
 
-## Management API and documentation
+## Management API, Management Center, and documentation
 
 Management config list/create/update/delete endpoints gain LiteLLM parity with comparable API-key-backed providers. Management views redact API keys and preserve API-key entry weights/proxy URLs.
+
+Management Center gains a dedicated LiteLLM provider brand, descriptor, card, icon, and localized labels. Its provider workbench maps Management API `litellm` records into typed resources. The form reuses the multi-key OpenAI-compatible experience: LiteLLM Proxy root base URL, API-key pool, custom headers, disabled state, priority, cooling control, and static model aliases. Client validation rejects base URLs ending in `/v1` and help text explains that base URL must be LiteLLM Proxy root.
+
+Management Center connection testing uses first configured static model through LiteLLM Chat Completions. Its existing client-side model-discovery flow queries LiteLLM `/v1/models` and inserts discovered model names into static alias rows only after explicit user action. Discovery does not create backend dynamic model state.
 
 `config.example.yaml` receives complete commented `litellm` example. `README.md` adds LiteLLM Proxy to upstream-provider support description and links LiteLLM documentation.
 
@@ -142,6 +146,15 @@ For each source protocol, test non-streaming and streaming behavior using `httpt
 ### Integration
 
 Add route-level test with static model aliases. Call all three public endpoints and assert each hits matching LiteLLM upstream endpoint with native request body and returns native response.
+
+### Management Center
+
+- Transform Management API LiteLLM records to and from typed provider resources.
+- Validate LiteLLM root URL, serialize API-key entries/models/headers, and preserve redacted existing credentials on edits.
+- Test workbench create/update/delete mapping.
+- Test Chat Completions connection-test path and `/v1/models` discovery path.
+- Add localized provider labels and form help across supported locales.
+- Browser-verify LiteLLM card, create/edit form, API-key editor, validation, discovery, and save behavior.
 
 ## Implementation boundaries
 
