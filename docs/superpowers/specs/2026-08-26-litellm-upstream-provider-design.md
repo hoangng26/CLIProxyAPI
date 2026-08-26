@@ -67,7 +67,7 @@ litellm:
 
 `base-url` is LiteLLM Proxy root. It must contain an HTTP(S) scheme and host and must not include a terminal `/v1` path segment. Executor constructs endpoint paths itself. This prevents accidental `/v1/v1/...` requests. API-key entries inherit shared base URL and headers; each entry may override outbound proxy URL. An enabled named block must contain at least one API-key entry, while disabled blocks may be retained without credentials.
 
-Each model is static. `name` is upstream LiteLLM model identifier. `alias` is public CLIProxyAPI model name; when omitted, `name` is used. Config validation rejects duplicate provider names and duplicate aliases within a provider, validates URL shape, and uses existing API-key weight rules. Provider options with existing semantic equivalents use same behavior: disabled state, priority, retry, request-scoped errors, cooling controls, custom headers, model capabilities, mapping, and thinking metadata.
+Each model is static. `name` is upstream LiteLLM model identifier. `alias` is public CLIProxyAPI model name; when omitted, `name` is used. Duplicate aliases are allowed when they map to different upstream names, preserving existing alias-pool behavior; duplicate identical alias/name pairs are removed during normalization. Config validation rejects duplicate provider names, validates URL shape, and uses existing API-key weight rules. Provider options with existing semantic equivalents use same behavior: disabled state, priority, retry, request-scoped errors, cooling controls, custom headers, model capabilities, mapping, and thinking metadata.
 
 No credentials are written to provider-specific token files. Secrets remain in config-backed auth records and existing secret-resolution paths.
 
@@ -116,7 +116,7 @@ The executor preserves native body shapes. It must not force Chat Completions `s
 
 ## Management API, Management Center, and documentation
 
-Management config list/create/update/delete endpoints gain LiteLLM parity with comparable API-key-backed providers. Management views redact API keys and preserve API-key entry weights/proxy URLs.
+Management config list/create/update/delete endpoints gain LiteLLM parity with comparable API-key-backed providers. Management GET responses use existing authorized config semantics, including `auth-index` metadata; the Management Center masks keys in rendered UI and preserves existing keys when an edit leaves key fields blank. API-key entry weights and proxy URLs remain editable.
 
 Management Center gains a dedicated LiteLLM provider brand, descriptor, card, icon, and localized labels. Its provider workbench maps Management API `litellm` records into typed resources. The form reuses the multi-key OpenAI-compatible experience: LiteLLM Proxy root base URL, API-key pool, custom headers, disabled state, priority, cooling control, and static model aliases. Client validation rejects base URLs ending in `/v1` and help text explains that base URL must be LiteLLM Proxy root.
 
@@ -154,7 +154,7 @@ Add route-level test with static model aliases. Call all three public endpoints 
 ### Management Center
 
 - Transform Management API LiteLLM records to and from typed provider resources.
-- Validate LiteLLM root URL, serialize API-key entries/models/headers, and preserve redacted existing credentials on edits.
+- Validate LiteLLM root URL, serialize API-key entries/models/headers, and preserve existing API-key values when UI edit fields remain blank.
 - Test workbench create/update/delete mapping.
 - Test Chat Completions connection-test path and `/v1/models` discovery path.
 - Add localized provider labels and form help across supported locales.
@@ -162,7 +162,7 @@ Add route-level test with static model aliases. Call all three public endpoints 
 
 ## Implementation boundaries
 
-Add dedicated LiteLLM config, synthesizer, registration, model registration, executor, management wiring, docs, and focused tests. Reuse shared scheduler, model registry, payload rules, auth abstractions, transport, logging, usage, and endpoint handlers. Do not modify generic `openai-compatibility` behavior. Translator changes only occur if existing source-format plumbing requires registration; native forwarding does not need new protocol translators.
+Add typed LiteLLM config, synthesizer, registration, model registration, executor, management wiring, docs, and focused tests. Reuse shared scheduler, model registry, payload rules, auth abstractions, transport, logging, usage, and endpoint handlers. Do not modify generic `openai-compatibility` behavior. Native forwarding keeps each source format as executor target, so no protocol translator changes are needed.
 
 ### Backend files and responsibilities
 
@@ -170,7 +170,7 @@ Add dedicated LiteLLM config, synthesizer, registration, model registration, exe
 - `internal/config/config_normalization.go`, `internal/config/parse.go`, `internal/config/config_load.go`, `internal/config/weight.go`: trim/validate URL, names, aliases, nested credentials, and weights in both load paths and include LiteLLM in YAML weight validation and runtime weight validation.
 - `internal/config/clone.go`: no custom code expected; add clone coverage proving nested LiteLLM slices/maps are independent.
 - `internal/watcher/synthesizer/config.go`, `internal/watcher/clients.go`: synthesize `litellm:<name>` API-key auth records, preserve `config_index`, `provider_key`, `config_name`, base URL, proxy, headers, priority, retry/cooling metadata, and update client counts.
-- `internal/watcher/diff/litellm.go`, `internal/watcher/diff/config_diff.go`, `internal/watcher/diff/model_hash.go`, `internal/modelconfig/model_hash.go`: hash and describe LiteLLM config changes without printing key material.
+- `internal/watcher/diff/litellm.go`, `internal/watcher/diff/config_diff.go`, `internal/modelconfig/model_hash.go`: hash and describe LiteLLM config changes without printing key material.
 - `sdk/config/config.go`: export LiteLLM aliases for SDK consumers.
 - `sdk/cliproxy/auth/conductor_models.go`, `sdk/cliproxy/auth/api_key_model_capabilities.go`: resolve LiteLLM config by auth index/name/key, map aliases, preserve suffixes, and compile capabilities.
 - `sdk/cliproxy/service_executors.go`, `sdk/cliproxy/service_models.go`: register `LiteLLMExecutor` under `litellm-<name>` and static models under matching key.
@@ -181,10 +181,10 @@ Add dedicated LiteLLM config, synthesizer, registration, model registration, exe
 ### Management Center files and responsibilities
 
 - `src/types/provider.ts`, `src/types/config.ts`: typed LiteLLM provider/model/key records and normalized config section.
-- `src/services/api/transformers.ts`, `src/services/api/providers.ts`: normalize `/config` and `/litellm`; serialize/merge/preserve redacted keys; implement get/create/update/disable/delete.
+- `src/services/api/transformers.ts`, `src/services/api/providers.ts`: normalize `/config` and `/litellm`; serialize/merge/preserve existing keys; implement get/create/update/disable/delete.
 - `src/features/providers/types.ts`, `descriptors.ts`, `brandLogos.ts`, `adapters.ts`, `useProviderWorkbench.ts`: add `litellm` brand, resource selector, descriptor, adapter, snapshot, mutations, and ordering.
 - `src/features/providers/sheets/forms/BaseProviderForm.tsx`, `useConnectivityTest.ts`, `useModelDiscovery.ts`, `src/components/providers/utils.ts`: reuse multi-key form; add LiteLLM root URL validation, `/v1/chat/completions` probe, and `/v1/models` discovery.
-- `src/features/providers/components/ProviderResourceTable.tsx`, `ProviderSheet.tsx`, `ProvidersWorkbenchPage.tsx`, `src/router/MainRoutes.tsx`: card/resource rendering, route text, and fixed-brand compatibility if required by existing navigation.
+- `src/features/providers/components/ProviderResourceTable.tsx`, `ProviderSheet.tsx`, `ProvidersWorkbenchPage.tsx`: card/resource rendering and route text. Existing generic route fallback renders `/ai-providers/litellm`; no `MainRoutes.tsx` change is needed.
 - `src/i18n/locales/en.json`, `zh-CN.json`, `zh-TW.json`, `ru.json`: provider name, root URL help, validation, discovery, and endpoint copy.
 - `tests/litellmProvider.test.ts`: focused normalization, CRUD, workbench adapter, endpoint builder, and validation tests. Browser verification covers card/form/discovery/save behavior.
 
@@ -194,7 +194,7 @@ The plan is split into backend and UI tracks. Backend contract must land before 
 
 ### Backend Task 1: Configuration contract and validation
 
-Add typed LiteLLM config and model/key structures. Implement normalization and validation in both `ParseConfigBytes` and file load paths. Use root URL invariant: scheme plus host, no terminal `/v1`; trim names, remove empty key entries, preserve disabled empty blocks, reject duplicate provider names and duplicate aliases within a block. Extend weight validation. Write failing tests first in `internal/config/litellm_test.go`, then run `rtk go test ./internal/config -run LiteLLM`.
+Add typed LiteLLM config and model/key structures. Implement normalization and validation in both `ParseConfigBytes` and file load paths. Use root URL invariant: scheme plus host, no terminal `/v1`; trim names, remove empty key entries, preserve disabled empty blocks, reject duplicate provider names, and allow duplicate aliases only when they map to different upstream names (alias pools). Extend weight validation. Write failing tests first in `internal/config/litellm_test.go`, then run `rtk go test ./internal/config -run LiteLLM`.
 
 ### Backend Task 2: Auth synthesis and runtime diff
 
@@ -210,11 +210,11 @@ Write executor tests before code in `internal/runtime/executor/litellm_executor_
 
 ### Backend Task 5: Management API and docs
 
-Add redacted auth-index response types, list normalization, CRUD handlers, per-key proxy lookup, and four management routes. Preserve unknown fields on PUT/PATCH as existing provider APIs do. Add `internal/api/handlers/management/config_litellm_test.go` covering GET redaction/index, PUT/PATCH validation, DELETE by name/index, duplicate-name rejection, and key/proxy preservation. Add example YAML and README support statement. Run management focused tests and `rtk go test ./...`.
+Add auth-index response types, list normalization, CRUD handlers, per-key proxy lookup, and four management routes. Preserve unknown fields on PUT/PATCH as existing provider APIs do. Add `internal/api/handlers/management/config_litellm_test.go` covering GET auth-index, PUT/PATCH validation, DELETE by name/index, duplicate-name rejection, and key/proxy preservation. Add example YAML and README support statement. Run management focused tests and `rtk go test ./...`.
 
 ### UI Task 1: Types, transforms, API CRUD
 
-Add LiteLLM config types and `litellm` normalization. Implement API methods against `/litellm`, preserving unknown fields and existing redacted credentials on edits. Add failing tests in `tests/litellmProvider.test.ts` for response normalization, serialization shape, merge behavior, and create/update/delete calls. Run `bun test tests/litellmProvider.test.ts`.
+Add LiteLLM config types and `litellm` normalization. Implement API methods against `/litellm`, preserving unknown fields and existing key values when UI edit fields remain blank. Add failing tests in `tests/litellmProvider.test.ts` for response normalization, serialization shape, merge behavior, and create/update/delete calls. Run `bun test tests/litellmProvider.test.ts`.
 
 ### UI Task 2: Provider workbench resource and descriptor
 
@@ -230,7 +230,7 @@ Add LiteLLM labels/help/errors to all four locale files. Ensure card appears in 
 
 ### Final integration task: Cross-repository verification
 
-Run backend `rtk gofmt -w` on changed Go files, `rtk go test ./...`, and required `rtk go build -o cli-proxy-api ./cmd/server && rm cli-proxy-api`. Run UI `bun run verify`. Confirm backend and UI agree on `litellm` YAML key, `/v0/management/litellm` routes, provider key naming, auth-index fields, model alias fields, root URL semantics, and redacted credential behavior. Do not stage or alter pre-existing `Dockerfile`/`docker-compose.yml` changes.
+Run backend `rtk gofmt -w` on changed Go files, `rtk go test ./...`, and required `rtk go build -o test-output ./cmd/server && rm test-output`. Run UI `bun run verify`. Confirm backend and UI agree on `litellm` YAML key, `/v0/management/litellm` routes, provider key naming, auth-index fields, model alias fields, root URL semantics, and blank-edit-field key preservation. Do not stage or alter pre-existing `Dockerfile`/`docker-compose.yml` changes.
 
 ## Verification matrix
 
