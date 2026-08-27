@@ -15,7 +15,6 @@ func NewFileTokenClientProvider() TokenClientProvider {
 type fileTokenClientProvider struct{}
 
 func (p *fileTokenClientProvider) Load(ctx context.Context, cfg *config.Config) (*TokenClientResult, error) {
-	// Stateless executors handle tokens
 	_ = ctx
 	_ = cfg
 	return &TokenClientResult{SuccessfulAuthed: 0}, nil
@@ -29,7 +28,7 @@ func NewAPIKeyClientProvider() APIKeyClientProvider {
 type apiKeyClientProvider struct{}
 
 func (p *apiKeyClientProvider) Load(ctx context.Context, cfg *config.Config) (*APIKeyClientResult, error) {
-	geminiCount, vertexCompatCount, claudeCount, codexCount, xaiCount, commandCodeCount, openAICompat := watcher.BuildAPIKeyClients(cfg)
+	geminiCount, vertexCompatCount, claudeCount, codexCount, xaiCount, commandCodeCount, openAICompat, liteLLMCount := watcher.BuildAPIKeyClients(cfg)
 	if ctx != nil {
 		select {
 		case <-ctx.Done():
@@ -45,5 +44,6 @@ func (p *apiKeyClientProvider) Load(ctx context.Context, cfg *config.Config) (*A
 		XAIKeyCount:          xaiCount,
 		CommandCodeKeyCount:  commandCodeCount,
 		OpenAICompatCount:    openAICompat,
+		LiteLLMKeyCount:      liteLLMCount,
 	}, nil
 }
