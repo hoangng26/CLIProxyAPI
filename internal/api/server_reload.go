@@ -217,6 +217,12 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 		commandCodeAPIKeyCount += len(cfg.CommandCodeKey[i].APIKeyEntries)
 	}
 	vertexAICompatCount := len(cfg.VertexCompatAPIKey)
+	liteLLMCount := 0
+	for i := range cfg.LiteLLM {
+		if !cfg.LiteLLM[i].Disabled {
+			liteLLMCount += len(cfg.LiteLLM[i].APIKeyEntries)
+		}
+	}
 	openAICompatCount := 0
 	for i := range cfg.OpenAICompatibility {
 		entry := cfg.OpenAICompatibility[i]
@@ -226,8 +232,8 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 		openAICompatCount += len(entry.APIKeyEntries)
 	}
 
-	total := authEntries + geminiAPIKeyCount + interactionsAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + xaiAPIKeyCount + commandCodeAPIKeyCount + vertexAICompatCount + openAICompatCount
-	fmt.Printf("server clients and configuration updated: %d clients (%d auth entries + %d Gemini API keys + %d Interactions API keys + %d Claude API keys + %d Codex keys + %d xAI keys + %d CommandCode keys + %d Vertex-compat + %d OpenAI-compat)\n",
+	total := authEntries + geminiAPIKeyCount + interactionsAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + xaiAPIKeyCount + commandCodeAPIKeyCount + vertexAICompatCount + liteLLMCount + openAICompatCount
+	fmt.Printf("server clients and configuration updated: %d clients (%d auth entries + %d Gemini API keys + %d Interactions API keys + %d Claude API keys + %d Codex keys + %d xAI keys + %d CommandCode keys + %d Vertex-compat + %d LiteLLM keys + %d OpenAI-compat)\n",
 		total,
 		authEntries,
 		geminiAPIKeyCount,
@@ -237,6 +243,7 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 		xaiAPIKeyCount,
 		commandCodeAPIKeyCount,
 		vertexAICompatCount,
+		liteLLMCount,
 		openAICompatCount,
 	)
 	return ctx.Err() == nil

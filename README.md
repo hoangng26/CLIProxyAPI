@@ -132,6 +132,7 @@ PackyCode provides special discounts for our software users: register using <a h
 - OpenAI Codex multi-account load balancing
 - Grok Build multi-account load balancing
 - OpenAI-compatible upstream providers via config (e.g., OpenRouter)
+- LiteLLM Proxy upstream providers via static configuration (see [LiteLLM docs](https://docs.litellm.ai/docs/))
 - Reusable Go SDK for embedding the proxy (see `docs/sdk-usage.md`)
 
 ## Getting Started

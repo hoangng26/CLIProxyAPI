@@ -684,24 +684,32 @@ nonstream-keepalive-interval: 0
 #       - name: "kimi-k2.5"
 #         alias: "claude-opus-4.66"
 
-# Vertex API keys (Vertex-compatible endpoints, base-url is optional)
-# vertex-api-key:
-#   - api-key: "vk-123..."                        # x-goog-api-key header
-#     weight: 5                                    # optional: weighted-round-robin share; omitted defaults to 1; maximum 1,000,000
-#     prefix: "test"                              # optional: require calls like "test/vertex-pro" to target this credential
-#     disable-cooling: false                       # optional override: true disables cooling, false enables it; omit to inherit global
-#     request-retry: 3                             # optional per-auth override; 0 disables additional rounds; omit or set < 0 to inherit global
-#     base-url: "https://example.com/api"         # optional, e.g. https://zenmux.ai/api; falls back to Google Vertex when omitted
-#     proxy-url: "socks5://proxy.example.com:1080" # optional per-key proxy override
-#     # proxy-url: "direct" # optional: explicit direct connect for this credential
+# LiteLLM Proxy upstream provider.
+# base-url is LiteLLM Proxy root; do not include terminal /v1.
+# Public Chat Completions, Responses, and Anthropic Messages requests are
+# forwarded natively to /v1/chat/completions, /v1/responses, or /v1/messages.
+# litellm:
+#   - name: "production"
+#     disabled: false
+#     priority: 0
+#     base-url: "http://localhost:4000"
 #     headers:
-#       X-Custom-Header: "custom-value"
-#       # Values starting with "$" dynamically copy the header value from downstream client requests.
-#       # If the client did not send the specified header, the header is omitted.
-#       # X-Claude-Code-Session-Id: "$ABC" # copies client's "ABC" header
-#     models:                                     # optional: map aliases to upstream model names
-#       - name: "gemini-2.5-flash"                # upstream model name
-#         alias: "vertex-flash"                   # client-visible alias
+#       X-Deployment: "production"
+#     request-retry: 2
+#     api-key-entries:
+#       - api-key: "${LITELLM_API_KEY}"
+#         weight: 1
+#         # proxy-url: "socks5://proxy.example.com:1080"
+#     models:
+#       - name: "openai/gpt-5"
+#         alias: "gpt-5-via-litellm"
+#         display-name: "GPT-5 via LiteLLM"
+#         max-context-length: 400000
+#         input-modalities: [text, image]
+#         output-modalities: [text]
+#         thinking:
+#           levels: [low, medium, high]
+
 #         display-name: "Vertex Flash"            # optional catalog display name
 #         thinking:                                # optional: exact thinking capability for this configured model
 #           levels: ["high", "medium", "low", "none", "auto"]
