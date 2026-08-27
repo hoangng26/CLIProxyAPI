@@ -52,6 +52,9 @@ func ParseConfigBytes(data []byte) (*Config, error) {
 	if errValidate := cfg.ValidateCommandCodeProviders(); errValidate != nil {
 		return nil, errValidate
 	}
+	if errValidate := cfg.ValidateLiteLLMProviders(); errValidate != nil {
+		return nil, errValidate
+	}
 
 	// Hash remote management key if plaintext is detected (nested), but do NOT persist.
 	if cfg.RemoteManagement.SecretKey != "" && !looksLikeBcrypt(cfg.RemoteManagement.SecretKey) {
@@ -103,6 +106,7 @@ func ParseConfigBytes(data []byte) (*Config, error) {
 	cfg.SanitizeCodexKeys()
 	cfg.SanitizeXAIKeys()
 	cfg.SanitizeCommandCodeKeys()
+	cfg.SanitizeLiteLLM()
 	cfg.SanitizeCodexHeaderDefaults()
 	cfg.SanitizeClaudeHeaderDefaults()
 	cfg.SanitizeClaudeKeys()

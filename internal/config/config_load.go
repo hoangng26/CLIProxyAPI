@@ -101,6 +101,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	if errValidate := cfg.ValidateCommandCodeProviders(); errValidate != nil {
 		return nil, errValidate
 	}
+	if errValidate := cfg.ValidateLiteLLMProviders(); errValidate != nil {
+		return nil, errValidate
+	}
 
 	// Hash remote management key if plaintext is detected (nested)
 	// We consider a value to be already hashed if it looks like a bcrypt hash ($2a$, $2b$, or $2y$ prefix).
@@ -167,6 +170,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	// Sanitize CommandCode keys: drop empty api-key; default empty base-url
 	cfg.SanitizeCommandCodeKeys()
+
+	// Sanitize LiteLLM providers: normalize roots and drop empty enabled blocks.
+	cfg.SanitizeLiteLLM()
 
 	// Sanitize Codex header defaults.
 	cfg.SanitizeCodexHeaderDefaults()

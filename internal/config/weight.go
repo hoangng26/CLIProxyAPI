@@ -51,6 +51,12 @@ func validateCredentialWeightYAML(data []byte) error {
 			if errValidate := validateCommandCodeShapeAndWeightNodes(value); errValidate != nil {
 				return errValidate
 			}
+			continue
+		}
+		if name == "litellm" {
+			if errValidate := validateNestedAPIKeyEntryWeightNodes(value, name); errValidate != nil {
+				return errValidate
+			}
 		}
 	}
 	return nil
@@ -193,6 +199,14 @@ func (cfg *Config) ValidateCredentialWeights() error {
 			weight := cfg.OpenAICompatibility[providerIndex].APIKeyEntries[keyIndex].Weight
 			if errValidate := ValidateCredentialWeight(weight); errValidate != nil {
 				return fmt.Errorf("openai-compatibility[%d].api-key-entries[%d].weight: %w", providerIndex, keyIndex, errValidate)
+			}
+		}
+	}
+	for providerIndex := range cfg.LiteLLM {
+		for keyIndex := range cfg.LiteLLM[providerIndex].APIKeyEntries {
+			weight := cfg.LiteLLM[providerIndex].APIKeyEntries[keyIndex].Weight
+			if errValidate := ValidateCredentialWeight(weight); errValidate != nil {
+				return fmt.Errorf("litellm[%d].api-key-entries[%d].weight: %w", providerIndex, keyIndex, errValidate)
 			}
 		}
 	}

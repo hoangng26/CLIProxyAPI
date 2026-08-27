@@ -2,6 +2,10 @@
 //
 // It re-exports the server configuration types and helpers so external projects can
 // embed CLIProxyAPI without importing internal packages.
+// Package config provides the public SDK configuration API.
+//
+// It re-exports the server configuration types and helpers so external projects can
+// embed CLIProxyAPI without importing internal packages.
 package config
 
 import internalconfig "github.com/router-for-me/CLIProxyAPI/v7/internal/config"
@@ -27,6 +31,9 @@ type XAIModel = internalconfig.XAIModel
 type CommandCodeProvider = internalconfig.CommandCodeProvider
 type CommandCodeAPIKey = internalconfig.CommandCodeAPIKey
 type CommandCodeModel = internalconfig.CommandCodeModel
+type LiteLLMProvider = internalconfig.LiteLLMProvider
+type LiteLLMAPIKey = internalconfig.LiteLLMAPIKey
+type LiteLLMModel = internalconfig.LiteLLMModel
 
 // Deprecated: CommandCodeKey previously aliased CodexKey; use CommandCodeProvider.
 type CommandCodeKey = internalconfig.CommandCodeProvider

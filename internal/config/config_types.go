@@ -696,6 +696,49 @@ func (m GeminiModel) GetIsCompat() bool        { return m.IsCompat }
 
 func (m GeminiModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
 
+// LiteLLMProvider is one named LiteLLM Proxy upstream with shared settings and API-key entries.
+type LiteLLMProvider struct {
+	Name                string                   `yaml:"name" json:"name"`
+	Priority            int                      `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Disabled            bool                     `yaml:"disabled,omitempty" json:"disabled,omitempty"`
+	Prefix              string                   `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+	BaseURL             string                   `yaml:"base-url" json:"base-url"`
+	APIKeyEntries       []LiteLLMAPIKey          `yaml:"api-key-entries,omitempty" json:"api-key-entries,omitempty"`
+	Models              []LiteLLMModel           `yaml:"models,omitempty" json:"models,omitempty"`
+	Headers             map[string]string        `yaml:"headers,omitempty" json:"headers,omitempty"`
+	DisableCooling      *bool                    `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+	RequestRetry        *int                     `yaml:"request-retry,omitempty" json:"request-retry,omitempty"`
+	RequestScopedErrors []RequestScopedErrorRule `yaml:"request-scoped-errors,omitempty" json:"request-scoped-errors,omitempty"`
+}
+
+// LiteLLMAPIKey is one credential under a LiteLLM provider.
+type LiteLLMAPIKey struct {
+	APIKey   string `yaml:"api-key" json:"api-key"`
+	Weight   *int   `yaml:"weight,omitempty" json:"weight,omitempty"`
+	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
+}
+
+// LiteLLMModel maps a public model alias to a LiteLLM upstream model.
+type LiteLLMModel struct {
+	Name             string                    `yaml:"name" json:"name"`
+	Alias            string                    `yaml:"alias,omitempty" json:"alias,omitempty"`
+	DisplayName      string                    `yaml:"display-name,omitempty" json:"display-name,omitempty"`
+	MaxContextLength int                       `yaml:"max-context-length,omitempty" json:"max-context-length,omitempty"`
+	ForceMapping     bool                      `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
+	InputModalities  []string                  `yaml:"input-modalities,omitempty" json:"input-modalities,omitempty"`
+	OutputModalities []string                  `yaml:"output-modalities,omitempty" json:"output-modalities,omitempty"`
+	IsCompat         bool                      `yaml:"is-compat,omitempty" json:"is-compat,omitempty"`
+	Thinking         *registry.ThinkingSupport `yaml:"thinking,omitempty" json:"thinking,omitempty"`
+}
+
+func (m LiteLLMModel) GetName() string                        { return m.Name }
+func (m LiteLLMModel) GetAlias() string                       { return m.Alias }
+func (m LiteLLMModel) GetDisplayName() string                 { return m.DisplayName }
+func (m LiteLLMModel) GetMaxContextLength() int               { return m.MaxContextLength }
+func (m LiteLLMModel) GetForceMapping() bool                  { return m.ForceMapping }
+func (m LiteLLMModel) GetIsCompat() bool                      { return m.IsCompat }
+func (m LiteLLMModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
+
 // OpenAICompatibility represents the configuration for OpenAI API compatibility
 // with external providers, allowing model aliases to be routed through OpenAI API format.
 type OpenAICompatibility struct {
