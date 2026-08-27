@@ -1,63 +1,70 @@
 package diff
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/modelconfig"
 )
 
 // ComputeLiteLLMModelsHash returns a stable hash for LiteLLM model mappings.
 func ComputeLiteLLMModelsHash(models []config.LiteLLMModel) string {
-	if len(models) == 0 {
-		return ""
-	}
-	data, err := json.Marshal(models)
-	if err != nil {
-		return ""
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+	return modelconfig.ComputeLiteLLMModelsHash(models)
 }
 
-// DiffLiteLLM produces human-readable changes without exposing API keys.
+// DiffLiteLLM produces human-readable change descriptions without exposing API keys.
 func DiffLiteLLM(oldList, newList []config.LiteLLMProvider) []string {
+	oldMap := make(map[string]config.LiteLLMProvider, len(oldList))
+	newMap := make(map[string]config.LiteLLMProvider, len(newList))
+	for _, entry := range oldList {
+		oldMap[strings.ToLower(strings.TrimSpace(entry.Name))] = entry
+	}
+	for _, entry := range newList {
+		newMap[strings.ToLower(strings.TrimSpace(entry.Name))] = entry
+	}
+	keys := make(map[string]struct{}, len(oldMap)+len(newMap))
+	for key := range oldMap {
+		keys[key] = struct{}{}
+	}
+	for key := range newMap {
+		keys[key] = struct{}{}
+	}
+	ordered := make([]string, 0, len(keys))
+	for key := range keys {
+		ordered = append(ordered, key)
+	}
+	sort.Strings(ordered)
 	changes := make([]string, 0)
-	oldByName := make(map[string]config.LiteLLMProvider, len(oldList))
-	newByName := make(map[string]config.LiteLLMProvider, len(newList))
-	for _, provider := range oldList {
-		oldByName[strings.ToLower(strings.TrimSpace(provider.Name))] = provider
-	}
-	for _, provider := range newList {
-		newByName[strings.ToLower(strings.TrimSpace(provider.Name))] = provider
-	}
-	for _, provider := range oldList {
-		key := strings.ToLower(strings.TrimSpace(provider.Name))
-		if _, ok := newByName[key]; !ok {
-			changes = append(changes, fmt.Sprintf("removed %s", provider.Name))
-		}
-	}
-	for _, provider := range newList {
-		key := strings.ToLower(strings.TrimSpace(provider.Name))
-		old, ok := oldByName[key]
-		if !ok {
-			changes = append(changes, fmt.Sprintf("added %s", provider.Name))
-			continue
-		}
-		if old.BaseURL != provider.BaseURL {
-			changes = append(changes, fmt.Sprintf("%s base-url changed", provider.Name))
-		}
-		if old.Disabled != provider.Disabled {
-			changes = append(changes, fmt.Sprintf("%s disabled: %t -> %t", provider.Name, old.Disabled, provider.Disabled))
-		}
-		if ComputeLiteLLMModelsHash(old.Models) != ComputeLiteLLMModelsHash(provider.Models) {
-			changes = append(changes, fmt.Sprintf("%s models changed", provider.Name))
-		}
-		if len(old.APIKeyEntries) != len(provider.APIKeyEntries) {
-			changes = append(changes, fmt.Sprintf("%s API key count: %d -> %d", provider.Name, len(old.APIKeyEntries), len(provider.APIKeyEntries)))
+	for _, key := range ordered {
+		oldEntry, oldOK := oldMap[key]
+		newEntry, newOK := newMap[key]
+		switch {
+		case !oldOK:
+			changes = append(changes, fmt.Sprintf("provider added: %s (api-keys=%d, models=%d)", newEntry.Name, len(newEntry.APIKeyEntries), len(newEntry.Models)))
+		case !newOK:
+			changes = append(changes, fmt.Sprintf("provider removed: %s (api-keys=%d, models=%d)", oldEntry.Name, len(oldEntry.APIKeyEntries), len(oldEntry.Models)))
+		default:
+			details := make([]string, 0, 5)
+			if oldEntry.BaseURL != newEntry.BaseURL {
+				details = append(details, "base-url updated")
+			}
+			if oldEntry.Disabled != newEntry.Disabled {
+				details = append(details, fmt.Sprintf("disabled %t -> %t", oldEntry.Disabled, newEntry.Disabled))
+			}
+			if len(oldEntry.APIKeyEntries) != len(newEntry.APIKeyEntries) {
+				details = append(details, fmt.Sprintf("api-keys %d -> %d", len(oldEntry.APIKeyEntries), len(newEntry.APIKeyEntries)))
+			}
+			if ComputeLiteLLMModelsHash(oldEntry.Models) != ComputeLiteLLMModelsHash(newEntry.Models) {
+				details = append(details, fmt.Sprintf("models %d -> %d", len(oldEntry.Models), len(newEntry.Models)))
+			}
+			if !equalStringMap(oldEntry.Headers, newEntry.Headers) {
+				details = append(details, "headers updated")
+			}
+			if len(details) > 0 {
+				changes = append(changes, fmt.Sprintf("provider updated: %s (%s)", newEntry.Name, strings.Join(details, ", ")))
+			}
 		}
 	}
 	return changes

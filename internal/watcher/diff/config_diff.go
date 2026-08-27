@@ -475,7 +475,14 @@ func BuildConfigChangeDetails(oldCfg, newCfg *config.Config) []string {
 		}
 	}
 
-	// Vertex-compatible API keys
+	// LiteLLM providers (summarized)
+	if liteLLM := DiffLiteLLM(oldCfg.LiteLLM, newCfg.LiteLLM); len(liteLLM) > 0 {
+		changes = append(changes, "litellm:")
+		for _, c := range liteLLM {
+			changes = append(changes, "  "+c)
+		}
+	}
+
 	if len(oldCfg.VertexCompatAPIKey) != len(newCfg.VertexCompatAPIKey) {
 		changes = append(changes, fmt.Sprintf("vertex-api-key count: %d -> %d", len(oldCfg.VertexCompatAPIKey), len(newCfg.VertexCompatAPIKey)))
 	} else {
