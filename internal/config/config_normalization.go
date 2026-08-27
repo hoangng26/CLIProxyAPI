@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -149,6 +150,87 @@ func (cfg *Config) SanitizeOAuthRequestScopedErrors() {
 		return
 	}
 	cfg.OAuthRequestScopedErrors = out
+}
+
+// SanitizeLiteLLM normalizes named LiteLLM Proxy provider blocks.
+func (cfg *Config) SanitizeLiteLLM() {
+	if cfg == nil || len(cfg.LiteLLM) == 0 {
+		return
+	}
+	out := make([]LiteLLMProvider, 0, len(cfg.LiteLLM))
+	for i := range cfg.LiteLLM {
+		e := cfg.LiteLLM[i]
+		e.Name = strings.TrimSpace(e.Name)
+		e.Prefix = normalizeModelPrefix(e.Prefix)
+		e.BaseURL = strings.TrimRight(strings.TrimSpace(e.BaseURL), "/")
+		e.Headers = NormalizeHeaders(e.Headers)
+		keys := make([]LiteLLMAPIKey, 0, len(e.APIKeyEntries))
+		for _, k := range e.APIKeyEntries {
+			k.APIKey = strings.TrimSpace(k.APIKey)
+			k.ProxyURL = strings.TrimSpace(k.ProxyURL)
+			if k.APIKey != "" {
+				keys = append(keys, k)
+			}
+		}
+		e.APIKeyEntries = keys
+		models := make([]LiteLLMModel, 0, len(e.Models))
+		seenModels := make(map[string]struct{}, len(e.Models))
+		for _, m := range e.Models {
+			m.Name = strings.TrimSpace(m.Name)
+			m.Alias = strings.TrimSpace(m.Alias)
+			m.DisplayName = strings.TrimSpace(m.DisplayName)
+			if m.Name == "" {
+				continue
+			}
+			alias := m.Alias
+			if alias == "" {
+				alias = m.Name
+			}
+			modelKey := strings.ToLower(m.Name) + "\x00" + strings.ToLower(alias)
+			if _, exists := seenModels[modelKey]; exists {
+				continue
+			}
+			seenModels[modelKey] = struct{}{}
+			models = append(models, m)
+		}
+		e.Models = models
+		if e.Name == "" || (!e.Disabled && len(e.APIKeyEntries) == 0) {
+			continue
+		}
+		out = append(out, e)
+	}
+	cfg.LiteLLM = out
+}
+
+// ValidateLiteLLMProviders checks names and root URLs after normalization.
+func (cfg *Config) ValidateLiteLLMProviders() error {
+	if cfg == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(cfg.LiteLLM))
+	for i := range cfg.LiteLLM {
+		provider := cfg.LiteLLM[i]
+		name := strings.TrimSpace(provider.Name)
+		if name == "" {
+			return fmt.Errorf("litellm[%d]: name is required", i)
+		}
+		nameKey := strings.ToLower(name)
+		if _, exists := seen[nameKey]; exists {
+			return fmt.Errorf("litellm: duplicate name %q", name)
+		}
+		seen[nameKey] = struct{}{}
+		if provider.BaseURL == "" {
+			return fmt.Errorf("litellm[%d].base-url: value is required", i)
+		}
+		u, err := url.Parse(strings.TrimSpace(provider.BaseURL))
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("litellm[%d].base-url: must be an HTTP(S) URL with host", i)
+		}
+		if strings.EqualFold(strings.Trim(u.Path, "/"), "v1") {
+			return fmt.Errorf("litellm[%d].base-url: must not end with /v1", i)
+		}
+	}
+	return nil
 }
 
 // SanitizeOpenAICompatibility removes OpenAI-compatibility provider entries that are

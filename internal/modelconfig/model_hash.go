@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
@@ -21,6 +22,21 @@ func ComputeOpenAICompatModelsHash(models []config.OpenAICompatibilityModel) str
 				continue
 			}
 			out(strings.ToLower(name) + "|" + strings.ToLower(alias) + "|" + strings.TrimSpace(model.DisplayName) + "|" + fmt.Sprintf("image=%t", model.Image) + "|" + fmt.Sprintf("force-mapping=%t", model.ForceMapping) + "|" + fmt.Sprintf("is-compat=%t", model.IsCompat) + "|input=" + strings.Join(normalizeModalities(model.InputModalities), ",") + "|output=" + strings.Join(normalizeModalities(model.OutputModalities), ",") + thinkingHashSuffix(model.Thinking))
+		}
+	})
+	return hashJoined(keys)
+}
+
+// ComputeLiteLLMModelsHash returns a stable hash for LiteLLM model mappings.
+func ComputeLiteLLMModelsHash(models []config.LiteLLMModel) string {
+	keys := modelRoutingKeys(func(out func(key string)) {
+		for _, model := range models {
+			name := strings.TrimSpace(model.Name)
+			alias := strings.TrimSpace(model.Alias)
+			if name == "" && alias == "" {
+				continue
+			}
+			out(strings.ToLower(name) + "|" + strings.ToLower(alias) + "|" + strings.TrimSpace(model.DisplayName) + "|" + fmt.Sprintf("force-mapping=%t", model.ForceMapping) + "|" + fmt.Sprintf("is-compat=%t", model.IsCompat) + "|input=" + strings.Join(normalizeModalities(model.InputModalities), ",") + "|output=" + strings.Join(normalizeModalities(model.OutputModalities), ",") + thinkingHashSuffix(model.Thinking))
 		}
 	})
 	return hashJoined(keys)
@@ -113,6 +129,7 @@ func modelRoutingKeys(collect func(out func(key string))) []string {
 	collect(func(key string) {
 		keys = append(keys, key)
 	})
+	sort.Strings(keys)
 	return keys
 }
 

@@ -14,6 +14,11 @@ import (
 
 const openAICompatibleProviderPrefix = "openai-compatible-"
 
+// LiteLLMProviderKey returns the internal provider key for a named LiteLLM provider.
+func LiteLLMProviderKey(name string) string {
+	return "litellm-" + strings.ToLower(strings.TrimSpace(name))
+}
+
 // OpenAICompatibleProviderKey returns the internal provider key for an OpenAI-compatible provider.
 func OpenAICompatibleProviderKey(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))

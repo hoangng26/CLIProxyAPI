@@ -60,6 +60,18 @@ func (s *Service) registerModelsForAuthWithCache(ctx context.Context, a *coreaut
 	if ctx.Err() != nil {
 		return
 	}
+	if strings.HasPrefix(provider, "litellm-") {
+		if entry := s.resolveConfigLiteLLM(a); entry != nil {
+			models := applyExcludedModels(buildLiteLLMConfigModels(entry), excluded)
+			models = s.appendPluginModels(provider, models)
+			if len(models) > 0 {
+				s.registerResolvedModelsForAuth(a, provider, applyModelPrefixes(models, a.Prefix, s.cfg != nil && s.cfg.ForceModelPrefix))
+				return
+			}
+		}
+		GlobalModelRegistry().UnregisterClient(a.ID)
+		return
+	}
 	var models []*ModelInfo
 	switch provider {
 	case constant.Gemini:

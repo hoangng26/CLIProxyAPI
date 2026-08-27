@@ -73,6 +73,9 @@ type APIKeyClientResult struct {
 
 	// OpenAICompatCount is the number of OpenAI compatibility API keys loaded
 	OpenAICompatCount int
+
+	// LiteLLMKeyCount is the number of LiteLLM API keys loaded.
+	LiteLLMKeyCount int
 }
 
 // WatcherFactory creates a watcher for configuration and token changes.

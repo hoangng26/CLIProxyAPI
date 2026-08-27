@@ -56,8 +56,8 @@ func (w *Watcher) reloadClients(rescanAuth bool, affectedOAuthProviders []string
 		w.clientsMutex.Unlock()
 	}
 
-	geminiAPIKeyCount, vertexCompatAPIKeyCount, claudeAPIKeyCount, codexAPIKeyCount, xaiAPIKeyCount, commandCodeAPIKeyCount, openAICompatCount := BuildAPIKeyClients(cfg)
-	totalAPIKeyClients := geminiAPIKeyCount + vertexCompatAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + xaiAPIKeyCount + commandCodeAPIKeyCount + openAICompatCount
+	geminiAPIKeyCount, vertexCompatAPIKeyCount, claudeAPIKeyCount, codexAPIKeyCount, xaiAPIKeyCount, commandCodeAPIKeyCount, openAICompatCount, liteLLMCount := BuildAPIKeyClients(cfg)
+	totalAPIKeyClients := geminiAPIKeyCount + vertexCompatAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + xaiAPIKeyCount + commandCodeAPIKeyCount + openAICompatCount + liteLLMCount
 	log.Debugf("loaded %d API key clients", totalAPIKeyClients)
 
 	var authFileCount int
@@ -149,7 +149,7 @@ func (w *Watcher) reloadClients(rescanAuth bool, affectedOAuthProviders []string
 	w.refreshAuthState(forceAuthRefresh)
 	redisqueue.NotifyUsageRefresh()
 
-	log.Infof("full client load complete - %d clients (%d auth files + %d Gemini API keys + %d Vertex API keys + %d Claude API keys + %d Codex keys + %d xAI keys + %d CommandCode keys + %d OpenAI-compat)",
+	log.Infof("full client load complete - %d clients (%d auth files + %d Gemini API keys + %d Vertex API keys + %d Claude API keys + %d Codex keys + %d xAI keys + %d CommandCode keys + %d OpenAI-compat + %d LiteLLM keys)",
 		totalNewClients,
 		authFileCount,
 		geminiAPIKeyCount,
@@ -159,6 +159,7 @@ func (w *Watcher) reloadClients(rescanAuth bool, affectedOAuthProviders []string
 		xaiAPIKeyCount,
 		commandCodeAPIKeyCount,
 		openAICompatCount,
+		liteLLMCount,
 	)
 }
 
@@ -384,7 +385,7 @@ func (w *Watcher) loadFileClients(cfg *config.Config) int {
 	return authFileCount
 }
 
-func BuildAPIKeyClients(cfg *config.Config) (gemini, vertex, claude, codex, xai, commandcode, openAICompat int) {
+func BuildAPIKeyClients(cfg *config.Config) (gemini, vertex, claude, codex, xai, commandcode, openAICompat, liteLLM int) {
 	if len(cfg.GeminiKey) > 0 {
 		gemini += len(cfg.GeminiKey)
 	}
@@ -409,6 +410,12 @@ func BuildAPIKeyClients(cfg *config.Config) (gemini, vertex, claude, codex, xai,
 		}
 		commandcode += len(cfg.CommandCodeKey[i].APIKeyEntries)
 	}
+	for i := range cfg.LiteLLM {
+		if cfg.LiteLLM[i].Disabled {
+			continue
+		}
+		liteLLM += len(cfg.LiteLLM[i].APIKeyEntries)
+	}
 	if len(cfg.OpenAICompatibility) > 0 {
 		for _, compatConfig := range cfg.OpenAICompatibility {
 			if compatConfig.Disabled {
@@ -417,7 +424,7 @@ func BuildAPIKeyClients(cfg *config.Config) (gemini, vertex, claude, codex, xai,
 			openAICompat += len(compatConfig.APIKeyEntries)
 		}
 	}
-	return gemini, vertex, claude, codex, xai, commandcode, openAICompat
+	return gemini, vertex, claude, codex, xai, commandcode, openAICompat, liteLLM
 }
 
 func (w *Watcher) persistConfigAsync() {

@@ -155,7 +155,17 @@ func compileAPIKeyModelCapabilitiesForAuth(cfg *internalconfig.Config, auth *Aut
 		return nil
 	}
 	out := make(map[string][]apiKeyModelCapabilityRoute)
-	switch strings.ToLower(strings.TrimSpace(auth.Provider)) {
+	provider := strings.ToLower(strings.TrimSpace(auth.Provider))
+	if strings.HasPrefix(provider, "litellm-") {
+		if entry := resolveLiteLLMConfigForAuth(cfg, auth); entry != nil {
+			compileConfiguredModelCapabilities(out, entry.Models, "litellm")
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	switch provider {
 	case "gemini":
 		if entry := resolveGeminiAPIKeyConfig(cfg, auth); entry != nil {
 			compileConfiguredModelCapabilities(out, entry.Models, "gemini")

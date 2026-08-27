@@ -265,6 +265,11 @@ func (s *Service) registerExecutorForAuth(a *coreauth.Auth, forceReplace bool) {
 	if a.Disabled {
 		return
 	}
+	providerName := strings.ToLower(strings.TrimSpace(a.Provider))
+	if strings.HasPrefix(providerName, "litellm-") {
+		s.coreManager.RegisterExecutor(executor.NewLiteLLMExecutor(providerName, cfg))
+		return
+	}
 	if compatProviderKey, _, isCompat := openAICompatInfoFromAuth(a); isCompat {
 		if compatProviderKey == "" {
 			compatProviderKey = strings.ToLower(strings.TrimSpace(a.Provider))

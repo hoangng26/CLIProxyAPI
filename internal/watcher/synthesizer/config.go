@@ -54,6 +54,7 @@ func (s *ConfigSynthesizer) Synthesize(ctx *SynthesisContext) ([]*coreauth.Auth,
 	out = append(out, s.synthesizeXAIKeys(ctx)...)
 	// CommandCode API Keys
 	out = append(out, s.synthesizeCommandCodeKeys(ctx)...)
+	out = append(out, s.synthesizeLiteLLMKeys(ctx)...)
 	// OpenAI-compat
 	out = append(out, s.synthesizeOpenAICompat(ctx)...)
 	// Vertex-compat
@@ -341,6 +342,74 @@ func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entr
 			a.Metadata = nil
 		}
 		out = append(out, a)
+	}
+	return out
+}
+
+// synthesizeLiteLLMKeys creates Auth entries for named LiteLLM Proxy API keys.
+func (s *ConfigSynthesizer) synthesizeLiteLLMKeys(ctx *SynthesisContext) []*coreauth.Auth {
+	cfg := ctx.Config
+	now := ctx.Now
+	idGen := ctx.IDGenerator
+	out := make([]*coreauth.Auth, 0)
+	for i := range cfg.LiteLLM {
+		block := cfg.LiteLLM[i]
+		if block.Disabled {
+			continue
+		}
+		name := strings.TrimSpace(block.Name)
+		if name == "" {
+			continue
+		}
+		providerKey := util.LiteLLMProviderKey(name)
+		base := strings.TrimSpace(block.BaseURL)
+		for j := range block.APIKeyEntries {
+			entry := block.APIKeyEntries[j]
+			key := strings.TrimSpace(entry.APIKey)
+			if key == "" {
+				continue
+			}
+			proxyURL := strings.TrimSpace(entry.ProxyURL)
+			id, token := idGen.Next("litellm:"+strings.ToLower(name), key, base, proxyURL, config.FormatSortedHeaders(block.Headers))
+			attrs := map[string]string{
+				"source":       fmt.Sprintf("config:litellm[%s]", token),
+				"api_key":      key,
+				"base_url":     base,
+				"config_name":  name,
+				"provider_key": providerKey,
+				"config_index": strconv.Itoa(i),
+			}
+			if block.Priority != 0 {
+				attrs["priority"] = strconv.Itoa(block.Priority)
+			}
+			addWeightToAttrs(entry.Weight, attrs)
+			if hash := diff.ComputeLiteLLMModelsHash(block.Models); hash != "" {
+				attrs["models_hash"] = hash
+			}
+			addConfigHeadersToAttrs(block.Headers, attrs)
+			metadata := map[string]any{}
+			if block.DisableCooling != nil {
+				metadata["disable_cooling"] = *block.DisableCooling
+			}
+			addRequestRetryToMetadata(block.RequestRetry, metadata)
+			addRequestScopedErrorsToMetadata(block.RequestScopedErrors, metadata)
+			a := &coreauth.Auth{
+				ID:         id,
+				Provider:   providerKey,
+				Label:      name,
+				Prefix:     strings.TrimSpace(block.Prefix),
+				Status:     coreauth.StatusActive,
+				ProxyURL:   proxyURL,
+				Attributes: attrs,
+				Metadata:   metadata,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			}
+			if len(a.Metadata) == 0 {
+				a.Metadata = nil
+			}
+			out = append(out, a)
+		}
 	}
 	return out
 }

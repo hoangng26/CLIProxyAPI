@@ -704,7 +704,11 @@ func (m *Manager) applyAPIKeyModelAliasWithRouting(routing *apiKeyModelRoutingSn
 	case "vertex":
 		upstreamModel = resolveUpstreamModelForVertexAPIKey(cfg, auth, requestedModel)
 	default:
-		upstreamModel = resolveUpstreamModelForOpenAICompatAPIKey(cfg, auth, requestedModel)
+		if strings.HasPrefix(provider, "litellm-") {
+			upstreamModel = resolveUpstreamModelForLiteLLM(cfg, auth, requestedModel)
+		} else {
+			upstreamModel = resolveUpstreamModelForOpenAICompatAPIKey(cfg, auth, requestedModel)
+		}
 	}
 
 	// Return upstream model if found, otherwise return requested model.
@@ -946,6 +950,41 @@ func resolveUpstreamModelForVertexAPIKey(cfg *internalconfig.Config, auth *Auth,
 		return ""
 	}
 	return resolveModelAliasFromConfigModels(requestedModel, asModelAliasEntries(entry.Models))
+}
+
+func resolveUpstreamModelForLiteLLM(cfg *internalconfig.Config, auth *Auth, requestedModel string) string {
+	entry := resolveLiteLLMConfigForAuth(cfg, auth)
+	if entry == nil {
+		return ""
+	}
+	return resolveModelAliasFromConfigModels(requestedModel, asModelAliasEntries(entry.Models))
+}
+
+func resolveLiteLLMConfigForAuth(cfg *internalconfig.Config, auth *Auth) *internalconfig.LiteLLMProvider {
+	if cfg == nil {
+		return nil
+	}
+	if auth != nil && auth.Attributes != nil {
+		if index, errIndex := strconv.Atoi(strings.TrimSpace(auth.Attributes[AttributeConfigIndex])); errIndex == nil && index >= 0 && index < len(cfg.LiteLLM) && !cfg.LiteLLM[index].Disabled {
+			return &cfg.LiteLLM[index]
+		}
+		if name := strings.TrimSpace(auth.Attributes["config_name"]); name != "" {
+			for i := range cfg.LiteLLM {
+				if !cfg.LiteLLM[i].Disabled && strings.EqualFold(strings.TrimSpace(cfg.LiteLLM[i].Name), name) {
+					return &cfg.LiteLLM[i]
+				}
+			}
+		}
+	}
+	if auth != nil {
+		provider := strings.TrimSpace(auth.Provider)
+		for i := range cfg.LiteLLM {
+			if !cfg.LiteLLM[i].Disabled && strings.EqualFold("litellm-"+strings.ToLower(strings.TrimSpace(cfg.LiteLLM[i].Name)), provider) {
+				return &cfg.LiteLLM[i]
+			}
+		}
+	}
+	return nil
 }
 
 func resolveUpstreamModelForOpenAICompatAPIKey(cfg *internalconfig.Config, auth *Auth, requestedModel string) string {
